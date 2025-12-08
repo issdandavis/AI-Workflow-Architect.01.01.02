@@ -5,11 +5,25 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
+import PublicHome from "@/pages/PublicHome";
+import Shop from "@/pages/Shop";
+import Storage from "@/pages/Storage";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
+      {/* Public Routes */}
+      <Route path="/" component={PublicHome} />
+      <Route path="/shop" component={Shop} />
+
+      {/* Backend / Dashboard Routes */}
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/storage" component={Storage} />
+      
+      {/* Redirects for demo purposes */}
+      <Route path="/agents" component={Dashboard} />
+      <Route path="/integrations" component={Dashboard} />
+      
       <Route component={NotFound} />
     </Switch>
   );
