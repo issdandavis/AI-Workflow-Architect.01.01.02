@@ -1667,6 +1667,110 @@ export async function registerRoutes(
     }
   });
 
+  // ===== WORLD ANVIL ROUTES =====
+
+  app.get("/api/world-anvil/status", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { isWorldAnvilConnected } = await import("./services/worldAnvilClient");
+      const connected = await isWorldAnvilConnected();
+      res.json({ connected });
+    } catch (error) {
+      res.json({ connected: false });
+    }
+  });
+
+  app.get("/api/world-anvil/user", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { getWorldAnvilUser } = await import("./services/worldAnvilClient");
+      const user = await getWorldAnvilUser();
+      res.json({ user });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to get user" });
+    }
+  });
+
+  app.get("/api/world-anvil/worlds", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { listWorldAnvilWorlds } = await import("./services/worldAnvilClient");
+      const worlds = await listWorldAnvilWorlds();
+      res.json({ worlds });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list worlds" });
+    }
+  });
+
+  app.get("/api/world-anvil/world/:worldId", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { worldId } = req.params;
+      const { getWorld } = await import("./services/worldAnvilClient");
+      const world = await getWorld(worldId);
+      res.json({ world });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to get world" });
+    }
+  });
+
+  app.get("/api/world-anvil/world/:worldId/articles", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { worldId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 25;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const { listWorldArticles } = await import("./services/worldAnvilClient");
+      const articles = await listWorldArticles(worldId, limit, offset);
+      res.json({ articles });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list articles" });
+    }
+  });
+
+  app.get("/api/world-anvil/article/:articleId", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { articleId } = req.params;
+      const { getArticle } = await import("./services/worldAnvilClient");
+      const article = await getArticle(articleId);
+      res.json({ article });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to get article" });
+    }
+  });
+
+  app.get("/api/world-anvil/world/:worldId/categories", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { worldId } = req.params;
+      const { listWorldCategories } = await import("./services/worldAnvilClient");
+      const categories = await listWorldCategories(worldId);
+      res.json({ categories });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list categories" });
+    }
+  });
+
+  app.get("/api/world-anvil/world/:worldId/maps", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { worldId } = req.params;
+      const { listWorldMaps } = await import("./services/worldAnvilClient");
+      const maps = await listWorldMaps(worldId);
+      res.json({ maps });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list maps" });
+    }
+  });
+
+  app.get("/api/world-anvil/world/:worldId/search", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { worldId } = req.params;
+      const query = req.query.q as string;
+      if (!query) {
+        return res.status(400).json({ error: "Search query required" });
+      }
+      const { searchArticles } = await import("./services/worldAnvilClient");
+      const results = await searchArticles(worldId, query);
+      res.json({ results });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to search articles" });
+    }
+  });
+
   // ===== ROUNDTABLE ROUTES =====
 
   // Get available AI providers

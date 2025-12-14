@@ -22,6 +22,7 @@ All integrations are managed securely through **Replit's Secrets tab** (lock ico
 | **Notion** | ✅ Connected | Uses Replit OAuth - `server/services/notionClient.ts` |
 | **Stripe** | ✅ Connected | Uses Replit Connector - `server/services/stripeClient.ts` |
 | **GitHub** | ✅ Connected | Uses Replit OAuth - existing integration |
+| **World Anvil** | ✅ Connected | Uses API Key - `server/services/worldAnvilClient.ts` |
 
 ### AI Provider API Keys (in Secrets tab)
 | Secret Name | Provider | Used For |
