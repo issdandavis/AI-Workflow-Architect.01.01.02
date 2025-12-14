@@ -1667,6 +1667,39 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/stripe/product", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { name, description, metadata } = z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        metadata: z.record(z.string()).optional(),
+      }).parse(req.body);
+
+      const { createStripeProduct } = await import("./services/stripeClient");
+      const product = await createStripeProduct(name, description, metadata);
+      res.json({ product });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create product" });
+    }
+  });
+
+  app.post("/api/stripe/price", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { productId, unitAmount, currency, recurring } = z.object({
+        productId: z.string().min(1),
+        unitAmount: z.number().int().positive(),
+        currency: z.string().default('usd'),
+        recurring: z.object({ interval: z.enum(['month', 'year']) }).optional(),
+      }).parse(req.body);
+
+      const { createStripePrice } = await import("./services/stripeClient");
+      const price = await createStripePrice(productId, unitAmount, currency, recurring);
+      res.json({ price });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create price" });
+    }
+  });
+
   // ===== WORLD ANVIL ROUTES =====
 
   app.get("/api/world-anvil/status", requireAuth, apiLimiter, async (req: Request, res: Response) => {

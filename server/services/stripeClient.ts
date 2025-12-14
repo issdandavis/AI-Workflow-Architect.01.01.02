@@ -142,3 +142,30 @@ export async function cancelStripeSubscription(subscriptionId: string) {
   const stripe = await getUncachableStripeClient();
   return await stripe.subscriptions.cancel(subscriptionId);
 }
+
+export async function createStripeProduct(name: string, description?: string, metadata?: Record<string, string>) {
+  const stripe = await getUncachableStripeClient();
+  return await stripe.products.create({
+    name,
+    description,
+    metadata,
+  });
+}
+
+export async function createStripePrice(
+  productId: string,
+  unitAmount: number,
+  currency: string = 'usd',
+  recurring?: { interval: 'month' | 'year' }
+) {
+  const stripe = await getUncachableStripeClient();
+  const params: any = {
+    product: productId,
+    unit_amount: unitAmount,
+    currency,
+  };
+  if (recurring) {
+    params.recurring = recurring;
+  }
+  return await stripe.prices.create(params);
+}
