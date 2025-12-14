@@ -221,7 +221,10 @@ class OrchestratorQueue extends EventEmitter {
     });
 
     // Fetch user's stored API key for the provider (decrypt at moment of use)
-    const apiKey = run.userId ? await getUserCredential(run.userId, run.provider) : null;
+    // Get userId from org owner since agentRun doesn't store userId directly
+    const currentOrg = await storage.getOrg(task.orgId);
+    const userId = currentOrg?.ownerUserId;
+    const apiKey = userId ? await getUserCredential(userId, run.provider) : null;
 
     let retryStep = 0;
     const response = await retryService.callWithRetry(
