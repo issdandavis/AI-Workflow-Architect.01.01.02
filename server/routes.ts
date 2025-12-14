@@ -1436,6 +1436,119 @@ export async function registerRoutes(
     }
   });
 
+  // ===== NOTION ROUTES =====
+
+  app.get("/api/notion/status", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { isNotionConnected } = await import("./services/notionClient");
+      const connected = await isNotionConnected();
+      res.json({ connected });
+    } catch (error) {
+      res.json({ connected: false });
+    }
+  });
+
+  app.get("/api/notion/user", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { getNotionUser } = await import("./services/notionClient");
+      const user = await getNotionUser();
+      res.json({ user });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to get user" });
+    }
+  });
+
+  app.get("/api/notion/pages", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { listNotionPages } = await import("./services/notionClient");
+      const pageSize = parseInt(req.query.pageSize as string) || 20;
+      const pages = await listNotionPages(pageSize);
+      res.json({ pages });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list pages" });
+    }
+  });
+
+  app.get("/api/notion/databases", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { listNotionDatabases } = await import("./services/notionClient");
+      const databases = await listNotionDatabases();
+      res.json({ databases });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list databases" });
+    }
+  });
+
+  app.get("/api/notion/page/:pageId", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { pageId } = req.params;
+      const { getNotionPage, getNotionPageContent } = await import("./services/notionClient");
+      const [page, content] = await Promise.all([
+        getNotionPage(pageId),
+        getNotionPageContent(pageId),
+      ]);
+      res.json({ page, content });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to get page" });
+    }
+  });
+
+  app.get("/api/notion/database/:databaseId", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { databaseId } = req.params;
+      const { getNotionDatabase, queryNotionDatabase } = await import("./services/notionClient");
+      const [database, items] = await Promise.all([
+        getNotionDatabase(databaseId),
+        queryNotionDatabase(databaseId),
+      ]);
+      res.json({ database, items });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to get database" });
+    }
+  });
+
+  app.post("/api/notion/page", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { parentId, properties, children } = z.object({
+        parentId: z.string().min(1),
+        properties: z.record(z.any()),
+        children: z.array(z.any()).optional(),
+      }).parse(req.body);
+
+      const { createNotionPage } = await import("./services/notionClient");
+      const page = await createNotionPage(parentId, properties, children);
+      res.json({ page });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create page" });
+    }
+  });
+
+  app.patch("/api/notion/page/:pageId", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { pageId } = req.params;
+      const { properties } = z.object({
+        properties: z.record(z.any()),
+      }).parse(req.body);
+
+      const { updateNotionPage } = await import("./services/notionClient");
+      const page = await updateNotionPage(pageId, properties);
+      res.json({ page });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update page" });
+    }
+  });
+
+  app.delete("/api/notion/page/:pageId", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { pageId } = req.params;
+      const { archiveNotionPage } = await import("./services/notionClient");
+      const page = await archiveNotionPage(pageId);
+      res.json({ page });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to archive page" });
+    }
+  });
+
   // ===== ROUNDTABLE ROUTES =====
 
   // Get available AI providers
