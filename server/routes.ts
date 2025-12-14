@@ -244,6 +244,134 @@ export async function registerRoutes(
     }
   });
 
+  // ===== CREDENTIAL VAULT ROUTES =====
+
+  app.get("/api/vault/credentials", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { listUserCredentials, SUPPORTED_PROVIDERS } = await import("./services/vault");
+      const credentials = await listUserCredentials(userId);
+      
+      res.json({ 
+        credentials,
+        supportedProviders: SUPPORTED_PROVIDERS,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list credentials" });
+    }
+  });
+
+  app.post("/api/vault/credentials", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { provider, apiKey, label } = z.object({
+        provider: z.string(),
+        apiKey: z.string().min(10, "API key too short"),
+        label: z.string().optional(),
+      }).parse(req.body);
+
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { storeUserCredential, validateApiKeyFormat, maskApiKey } = await import("./services/vault");
+
+      if (!validateApiKeyFormat(provider, apiKey)) {
+        return res.status(400).json({ error: `Invalid API key format for ${provider}` });
+      }
+
+      const credential = await storeUserCredential(userId, provider, apiKey, label);
+
+      await storage.createAuditLog({
+        orgId: req.session.orgId!,
+        userId,
+        action: "credential_stored",
+        target: provider,
+        detailJson: { credentialId: credential.id, masked: maskApiKey(apiKey) },
+      });
+
+      res.json({ 
+        success: true, 
+        credential: {
+          id: credential.id,
+          provider: credential.provider,
+          label: credential.label,
+        },
+      });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to store credential" });
+    }
+  });
+
+  app.delete("/api/vault/credentials/:id", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { deleteUserCredential } = await import("./services/vault");
+      const deleted = await deleteUserCredential(userId, id);
+
+      if (!deleted) {
+        return res.status(404).json({ error: "Credential not found" });
+      }
+
+      await storage.createAuditLog({
+        orgId: req.session.orgId!,
+        userId,
+        action: "credential_deleted",
+        target: id,
+        detailJson: null,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to delete credential" });
+    }
+  });
+
+  app.get("/api/vault/usage", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      if (!orgId) {
+        return res.status(400).json({ error: "No organization set" });
+      }
+
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const records = await storage.getUsageRecords(orgId, thirtyDaysAgo);
+      const summary = await storage.getUsageSummary(orgId, thirtyDaysAgo);
+
+      const byProvider: Record<string, { tokens: number; costUsd: number }> = {};
+      for (const record of records) {
+        if (!byProvider[record.provider]) {
+          byProvider[record.provider] = { tokens: 0, costUsd: 0 };
+        }
+        byProvider[record.provider].tokens += record.inputTokens + record.outputTokens;
+        byProvider[record.provider].costUsd += parseFloat(record.estimatedCostUsd || "0");
+      }
+
+      res.json({
+        summary: {
+          totalTokens: summary.totalTokens,
+          totalCostUsd: summary.totalCostUsd,
+          periodDays: 30,
+        },
+        byProvider,
+        recentRecords: records.slice(0, 50),
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get usage" });
+    }
+  });
+
   // ===== AGENT ORCHESTRATION ROUTES =====
 
   app.post("/api/agents/run", requireAuth, agentLimiter, checkBudget, async (req: Request, res: Response) => {

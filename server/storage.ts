@@ -11,8 +11,10 @@ import {
   auditLog, type AuditLog, type InsertAuditLog,
   budgets, type Budget, type InsertBudget,
   apiKeys, type ApiKey, type InsertApiKey,
+  userCredentials, type UserCredential, type InsertUserCredential,
+  usageRecords, type UsageRecord, type InsertUsageRecord,
 } from "@shared/schema";
-import { eq, and, desc, like, sql } from "drizzle-orm";
+import { eq, and, desc, like, sql, gte } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -71,6 +73,21 @@ export interface IStorage {
   getApiKeyByKey(key: string): Promise<ApiKey | undefined>;
   getApiKeysByOrg(orgId: string): Promise<ApiKey[]>;
   createApiKey(apiKey: InsertApiKey): Promise<ApiKey>;
+
+  // User Credentials (encrypted vault)
+  getUserCredentials(userId: string): Promise<UserCredential[]>;
+  getUserCredentialById(id: string): Promise<UserCredential | undefined>;
+  getUserCredentialsByProvider(userId: string, provider: string): Promise<UserCredential | undefined>;
+  createUserCredential(credential: InsertUserCredential): Promise<UserCredential>;
+  updateUserCredential(id: string, update: Partial<InsertUserCredential>): Promise<UserCredential>;
+  updateCredentialLastUsed(id: string): Promise<void>;
+  deleteUserCredential(id: string): Promise<void>;
+
+  // Usage Records
+  createUsageRecord(record: InsertUsageRecord): Promise<UsageRecord>;
+  getUsageRecords(orgId: string, since?: Date): Promise<UsageRecord[]>;
+  getUserUsageRecords(userId: string, since?: Date): Promise<UsageRecord[]>;
+  getUsageSummary(orgId: string, since: Date): Promise<{ totalTokens: number; totalCostUsd: number }>;
 }
 
 export class DbStorage implements IStorage {
@@ -306,6 +323,104 @@ export class DbStorage implements IStorage {
   async createApiKey(insertApiKey: InsertApiKey): Promise<ApiKey> {
     const [apiKey] = await db.insert(apiKeys).values(insertApiKey).returning();
     return apiKey;
+  }
+
+  // User Credentials (encrypted vault)
+  async getUserCredentials(userId: string): Promise<UserCredential[]> {
+    return db
+      .select()
+      .from(userCredentials)
+      .where(eq(userCredentials.userId, userId))
+      .orderBy(desc(userCredentials.createdAt));
+  }
+
+  async getUserCredentialById(id: string): Promise<UserCredential | undefined> {
+    const [credential] = await db
+      .select()
+      .from(userCredentials)
+      .where(eq(userCredentials.id, id));
+    return credential;
+  }
+
+  async getUserCredentialsByProvider(userId: string, provider: string): Promise<UserCredential | undefined> {
+    const [credential] = await db
+      .select()
+      .from(userCredentials)
+      .where(and(eq(userCredentials.userId, userId), eq(userCredentials.provider, provider)));
+    return credential;
+  }
+
+  async createUserCredential(credential: InsertUserCredential): Promise<UserCredential> {
+    const [created] = await db.insert(userCredentials).values(credential).returning();
+    return created;
+  }
+
+  async updateUserCredential(id: string, update: Partial<InsertUserCredential>): Promise<UserCredential> {
+    const [updated] = await db
+      .update(userCredentials)
+      .set({ ...update, updatedAt: new Date() })
+      .where(eq(userCredentials.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateCredentialLastUsed(id: string): Promise<void> {
+    await db
+      .update(userCredentials)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(userCredentials.id, id));
+  }
+
+  async deleteUserCredential(id: string): Promise<void> {
+    await db.delete(userCredentials).where(eq(userCredentials.id, id));
+  }
+
+  // Usage Records
+  async createUsageRecord(record: InsertUsageRecord): Promise<UsageRecord> {
+    const [created] = await db.insert(usageRecords).values(record).returning();
+    return created;
+  }
+
+  async getUsageRecords(orgId: string, since?: Date): Promise<UsageRecord[]> {
+    if (since) {
+      return db
+        .select()
+        .from(usageRecords)
+        .where(and(eq(usageRecords.orgId, orgId), gte(usageRecords.createdAt, since)))
+        .orderBy(desc(usageRecords.createdAt));
+    }
+    return db
+      .select()
+      .from(usageRecords)
+      .where(eq(usageRecords.orgId, orgId))
+      .orderBy(desc(usageRecords.createdAt));
+  }
+
+  async getUserUsageRecords(userId: string, since?: Date): Promise<UsageRecord[]> {
+    if (since) {
+      return db
+        .select()
+        .from(usageRecords)
+        .where(and(eq(usageRecords.userId, userId), gte(usageRecords.createdAt, since)))
+        .orderBy(desc(usageRecords.createdAt));
+    }
+    return db
+      .select()
+      .from(usageRecords)
+      .where(eq(usageRecords.userId, userId))
+      .orderBy(desc(usageRecords.createdAt));
+  }
+
+  async getUsageSummary(orgId: string, since: Date): Promise<{ totalTokens: number; totalCostUsd: number }> {
+    const records = await db
+      .select()
+      .from(usageRecords)
+      .where(and(eq(usageRecords.orgId, orgId), gte(usageRecords.createdAt, since)));
+    
+    const totalTokens = records.reduce((sum, r) => sum + r.inputTokens + r.outputTokens, 0);
+    const totalCostUsd = records.reduce((sum, r) => sum + parseFloat(r.estimatedCostUsd || "0"), 0);
+    
+    return { totalTokens, totalCostUsd };
   }
 }
 

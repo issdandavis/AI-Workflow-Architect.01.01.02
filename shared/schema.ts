@@ -201,3 +201,49 @@ export const insertApiKeySchema = createInsertSchema(apiKeys).omit({
 
 export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
 export type ApiKey = typeof apiKeys.$inferSelect;
+
+// User Credentials (encrypted API keys per user)
+export const userCredentials = pgTable("user_credentials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(), // openai, anthropic, perplexity, xai, github, etc.
+  encryptedKey: text("encrypted_key").notNull(), // AES-256-GCM encrypted API key
+  iv: text("iv").notNull(), // Initialization vector for decryption
+  authTag: text("auth_tag").notNull(), // Authentication tag for AES-GCM
+  label: text("label"), // User-friendly label
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertUserCredentialSchema = createInsertSchema(userCredentials).omit({
+  id: true,
+  lastUsedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertUserCredential = z.infer<typeof insertUserCredentialSchema>;
+export type UserCredential = typeof userCredentials.$inferSelect;
+
+// Usage tracking for cost estimates
+export const usageRecords = pgTable("usage_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  estimatedCostUsd: decimal("estimated_cost_usd", { precision: 10, scale: 6 }).notNull().default("0"),
+  metadata: jsonb("metadata"), // Additional context (agent run id, etc.)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertUsageRecordSchema = createInsertSchema(usageRecords).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertUsageRecord = z.infer<typeof insertUsageRecordSchema>;
+export type UsageRecord = typeof usageRecords.$inferSelect;
