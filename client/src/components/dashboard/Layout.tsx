@@ -65,8 +65,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {publicNavItems.map((item) => {
                 const isActive = location === item.href;
                 return (
-                  <Link key={item.href} href={item.href}>
-                    <a className={cn(
+                  <Link key={item.href} href={item.href} className={cn(
                       "flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 group",
                       isActive 
                         ? "bg-primary/10 text-primary border border-primary/20" 
@@ -74,7 +73,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     )}>
                       <item.icon className={cn("w-5 h-5", isActive && "text-primary")} />
                       <span className="hidden lg:block font-medium">{item.label}</span>
-                    </a>
                   </Link>
                 );
               })}
@@ -88,8 +86,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {backendNavItems.map((item) => {
                 const isActive = location === item.href;
                 return (
-                  <Link key={item.href} href={item.href}>
-                    <a className={cn(
+                  <Link key={item.href} href={item.href} className={cn(
                       "flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 group",
                       isActive 
                         ? "bg-primary/10 text-primary border border-primary/20 shadow-[0_0_10px_rgba(0,255,255,0.1)]" 
@@ -98,7 +95,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       <item.icon className={cn("w-5 h-5", isActive && "animate-pulse")} />
                       <span className="hidden lg:block font-medium">{item.label}</span>
                       {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_5px_currentColor] hidden lg:block" />}
-                    </a>
                   </Link>
                 );
               })}
