@@ -330,3 +330,63 @@ export const insertRoundtableMessageSchema = createInsertSchema(roundtableMessag
 
 export type InsertRoundtableMessage = z.infer<typeof insertRoundtableMessageSchema>;
 export type RoundtableMessage = typeof roundtableMessages.$inferSelect;
+
+// Agent Analyses - Store file analysis records
+export const agentAnalyses = pgTable("agent_analyses", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  orgId: varchar("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").references(() => projects.id, { onDelete: "set null" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  filePath: text("file_path").notNull(),
+  content: text("content").notNull(),
+  analysisResult: jsonb("analysis_result"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAgentAnalysisSchema = createInsertSchema(agentAnalyses).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAgentAnalysis = z.infer<typeof insertAgentAnalysisSchema>;
+export type AgentAnalysis = typeof agentAnalyses.$inferSelect;
+
+// Agent Suggestions - Store AI suggestions
+export const agentSuggestions = pgTable("agent_suggestions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  analysisId: integer("analysis_id").notNull().references(() => agentAnalyses.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  prompt: text("prompt").notNull(),
+  suggestions: jsonb("suggestions").notNull(),
+  diffPreview: text("diff_preview"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAgentSuggestionSchema = createInsertSchema(agentSuggestions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAgentSuggestion = z.infer<typeof insertAgentSuggestionSchema>;
+export type AgentSuggestion = typeof agentSuggestions.$inferSelect;
+
+// Agent Proposals - Store change proposals
+export const agentProposals = pgTable("agent_proposals", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  suggestionId: integer("suggestion_id").references(() => agentSuggestions.id, { onDelete: "set null" }),
+  filePath: text("file_path").notNull(),
+  originalContent: text("original_content").notNull(),
+  proposedContent: text("proposed_content").notNull(),
+  status: text("status", { enum: ["pending", "approved", "rejected", "applied"] }).notNull().default("pending"),
+  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAgentProposalSchema = createInsertSchema(agentProposals).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAgentProposal = z.infer<typeof insertAgentProposalSchema>;
+export type AgentProposal = typeof agentProposals.$inferSelect;

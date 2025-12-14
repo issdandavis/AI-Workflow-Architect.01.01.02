@@ -15,6 +15,7 @@ import Integrations from "@/pages/Integrations";
 import Agents from "@/pages/Agents";
 import Usage from "@/pages/Usage";
 import Roundtable from "@/pages/Roundtable";
+import AgentDev from "@/pages/AgentDev";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/agents" component={Agents} />
       <Route path="/usage" component={Usage} />
       <Route path="/roundtable" component={Roundtable} />
+      <Route path="/agent-dev" component={AgentDev} />
       
       <Route component={NotFound} />
     </Switch>

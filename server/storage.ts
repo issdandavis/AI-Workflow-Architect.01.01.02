@@ -16,6 +16,9 @@ import {
   decisionTraces, type DecisionTrace, type InsertDecisionTrace,
   roundtableSessions, type RoundtableSession, type InsertRoundtableSession,
   roundtableMessages, type RoundtableMessage, type InsertRoundtableMessage,
+  agentAnalyses, type AgentAnalysis, type InsertAgentAnalysis,
+  agentSuggestions, type AgentSuggestion, type InsertAgentSuggestion,
+  agentProposals, type AgentProposal, type InsertAgentProposal,
 } from "@shared/schema";
 import { eq, and, desc, like, sql, gte, max } from "drizzle-orm";
 
@@ -111,6 +114,22 @@ export interface IStorage {
   createRoundtableMessage(data: InsertRoundtableMessage): Promise<RoundtableMessage>;
   getRoundtableMessages(sessionId: string): Promise<RoundtableMessage[]>;
   getNextSequenceNumber(sessionId: string): Promise<number>;
+
+  // Agent Analyses
+  createAgentAnalysis(data: InsertAgentAnalysis): Promise<AgentAnalysis>;
+  getAgentAnalysis(id: number): Promise<AgentAnalysis | undefined>;
+  getAgentAnalysesByOrg(orgId: string): Promise<AgentAnalysis[]>;
+
+  // Agent Suggestions
+  createAgentSuggestion(data: InsertAgentSuggestion): Promise<AgentSuggestion>;
+  getAgentSuggestion(id: number): Promise<AgentSuggestion | undefined>;
+  getAgentSuggestionsByAnalysis(analysisId: number): Promise<AgentSuggestion[]>;
+
+  // Agent Proposals
+  createAgentProposal(data: InsertAgentProposal): Promise<AgentProposal>;
+  getAgentProposal(id: number): Promise<AgentProposal | undefined>;
+  getAgentProposalsByOrg(orgId: string, status?: string): Promise<AgentProposal[]>;
+  updateAgentProposalStatus(id: number, status: string, approvedBy?: string): Promise<AgentProposal | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -567,6 +586,76 @@ export class DbStorage implements IStorage {
       .from(roundtableMessages)
       .where(eq(roundtableMessages.sessionId, sessionId));
     return (result[0]?.maxSeq ?? 0) + 1;
+  }
+
+  // Agent Analyses
+  async createAgentAnalysis(data: InsertAgentAnalysis): Promise<AgentAnalysis> {
+    const [analysis] = await db.insert(agentAnalyses).values(data).returning();
+    return analysis;
+  }
+
+  async getAgentAnalysis(id: number): Promise<AgentAnalysis | undefined> {
+    const [analysis] = await db.select().from(agentAnalyses).where(eq(agentAnalyses.id, id));
+    return analysis;
+  }
+
+  async getAgentAnalysesByOrg(orgId: string): Promise<AgentAnalysis[]> {
+    return db
+      .select()
+      .from(agentAnalyses)
+      .where(eq(agentAnalyses.orgId, orgId))
+      .orderBy(desc(agentAnalyses.createdAt));
+  }
+
+  // Agent Suggestions
+  async createAgentSuggestion(data: InsertAgentSuggestion): Promise<AgentSuggestion> {
+    const [suggestion] = await db.insert(agentSuggestions).values(data).returning();
+    return suggestion;
+  }
+
+  async getAgentSuggestion(id: number): Promise<AgentSuggestion | undefined> {
+    const [suggestion] = await db.select().from(agentSuggestions).where(eq(agentSuggestions.id, id));
+    return suggestion;
+  }
+
+  async getAgentSuggestionsByAnalysis(analysisId: number): Promise<AgentSuggestion[]> {
+    return db
+      .select()
+      .from(agentSuggestions)
+      .where(eq(agentSuggestions.analysisId, analysisId))
+      .orderBy(desc(agentSuggestions.createdAt));
+  }
+
+  // Agent Proposals
+  async createAgentProposal(data: InsertAgentProposal): Promise<AgentProposal> {
+    const [proposal] = await db.insert(agentProposals).values(data).returning();
+    return proposal;
+  }
+
+  async getAgentProposal(id: number): Promise<AgentProposal | undefined> {
+    const [proposal] = await db.select().from(agentProposals).where(eq(agentProposals.id, id));
+    return proposal;
+  }
+
+  async updateAgentProposalStatus(id: number, status: string, approvedBy?: string): Promise<AgentProposal | undefined> {
+    const [proposal] = await db
+      .update(agentProposals)
+      .set({ status: status as any, approvedBy })
+      .where(eq(agentProposals.id, id))
+      .returning();
+    return proposal;
+  }
+
+  async getAgentProposalsByOrg(orgId: string, status?: string): Promise<AgentProposal[]> {
+    const allProposals = await db
+      .select()
+      .from(agentProposals)
+      .orderBy(desc(agentProposals.createdAt));
+    
+    if (status) {
+      return allProposals.filter(p => p.status === status);
+    }
+    return allProposals;
   }
 }
 

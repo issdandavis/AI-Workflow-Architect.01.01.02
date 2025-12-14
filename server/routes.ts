@@ -1594,5 +1594,391 @@ export async function registerRoutes(
     }
   });
 
+  // ===== AGENT DEVELOPMENT ROUTES =====
+
+  app.get("/api/agent-dev/analyze", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { filePath } = z.object({
+        filePath: z.string().min(1, "File path is required"),
+      }).parse(req.query);
+
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+
+      if (!orgId || !userId) {
+        return res.status(400).json({ error: "No organization or user context" });
+      }
+
+      // Security: Prevent directory traversal
+      if (filePath.includes("..") || filePath.startsWith("/")) {
+        return res.status(400).json({ error: "Invalid file path - directory traversal not allowed" });
+      }
+
+      // For demo purposes, we'll read from the project root
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      
+      // Secure path validation using resolve and relative
+      const projectRoot = process.cwd();
+      const resolvedPath = path.resolve(projectRoot, filePath);
+      const relativePath = path.relative(projectRoot, resolvedPath);
+      
+      // Ensure the resolved path is still within project root
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        return res.status(403).json({ error: "Access denied: path outside project" });
+      }
+      
+      const safePath = resolvedPath;
+
+      let content: string;
+      let stats: any;
+      try {
+        content = await fs.readFile(safePath, "utf-8");
+        stats = await fs.stat(safePath);
+      } catch (err) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      const lines = content.split("\n").length;
+
+      // Persist the analysis
+      const analysis = await storage.createAgentAnalysis({
+        orgId,
+        projectId: null,
+        userId,
+        filePath,
+        content,
+        analysisResult: { lines, size: stats.size },
+      });
+
+      await storage.createAuditLog({
+        orgId,
+        userId,
+        action: "agent_dev_analyze",
+        target: filePath,
+        detailJson: { lines, size: stats.size, analysisId: analysis.id },
+      });
+
+      res.json({
+        analysisId: analysis.id,
+        filePath,
+        content,
+        lines,
+        size: stats.size,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors.map(e => e.message).join(", ") });
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to analyze file" });
+    }
+  });
+
+  app.post("/api/agent-dev/suggest", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { filePath, content, prompt, provider, model, analysisId } = z.object({
+        filePath: z.string().min(1),
+        content: z.string().min(1),
+        prompt: z.string().min(1).max(5000),
+        provider: z.enum(["openai", "anthropic", "xai", "perplexity", "google"]),
+        model: z.string().optional(),
+        analysisId: z.number().optional(),
+      }).parse(req.body);
+
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+
+      if (!orgId || !userId) {
+        return res.status(400).json({ error: "No organization or user context" });
+      }
+
+      // Create analysis record if not provided
+      let finalAnalysisId = analysisId;
+      if (!finalAnalysisId) {
+        const analysis = await storage.createAgentAnalysis({
+          orgId,
+          projectId: null,
+          userId,
+          filePath,
+          content,
+          analysisResult: null,
+        });
+        finalAnalysisId = analysis.id;
+      }
+
+      const adapter = getProviderAdapter(provider);
+
+      const systemPrompt = `You are an expert code reviewer and improvement assistant. Analyze the following code and provide specific, actionable improvement suggestions.
+
+FILE: ${filePath}
+
+CODE:
+\`\`\`
+${content}
+\`\`\`
+
+USER REQUEST: ${prompt}
+
+Please provide 3-5 specific code improvement suggestions. For each suggestion:
+1. Give it a clear, concise title
+2. Explain why this improvement is beneficial
+3. Provide the improved code block if applicable
+
+Format your response as JSON with the following structure:
+{
+  "suggestions": [
+    {
+      "title": "Improvement title",
+      "description": "Detailed explanation of why and how to improve",
+      "codeBlock": "The improved code snippet (optional)"
+    }
+  ]
+}`;
+
+      const result = await adapter.call(systemPrompt, model || "");
+
+      if (!result.success) {
+        return res.status(400).json({
+          error: result.error || "Failed to get suggestions",
+          provider,
+        });
+      }
+
+      // Try to parse JSON from response
+      let suggestions = [];
+      try {
+        const jsonMatch = result.content?.match(/\{[\s\S]*"suggestions"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          suggestions = parsed.suggestions || [];
+        }
+      } catch {
+        // If JSON parsing fails, create a single suggestion from the raw response
+        suggestions = [{
+          title: "AI Analysis",
+          description: result.content || "No suggestions available",
+          codeBlock: null,
+        }];
+      }
+
+      // Persist the suggestion
+      const suggestion = await storage.createAgentSuggestion({
+        analysisId: finalAnalysisId,
+        provider,
+        model: model || "default",
+        prompt,
+        suggestions,
+        diffPreview: null,
+      });
+
+      await storage.createAuditLog({
+        orgId,
+        userId,
+        action: "agent_dev_suggest",
+        target: filePath,
+        detailJson: {
+          provider,
+          model: model || "default",
+          promptLength: prompt.length,
+          suggestionsCount: suggestions.length,
+          suggestionId: suggestion.id,
+          inputTokens: result.usage?.inputTokens,
+          outputTokens: result.usage?.outputTokens,
+        },
+      });
+
+      res.json({
+        suggestionId: suggestion.id,
+        analysisId: finalAnalysisId,
+        suggestions,
+        provider,
+        usage: result.usage ? {
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+        } : undefined,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors.map(e => e.message).join(", ") });
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get suggestions" });
+    }
+  });
+
+  app.post("/api/agent-dev/apply", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { filePath, originalContent, proposedContent, description, suggestionId } = z.object({
+        filePath: z.string().min(1),
+        originalContent: z.string(),
+        proposedContent: z.string().min(1),
+        description: z.string().min(1).max(1000),
+        suggestionId: z.number().optional(),
+      }).parse(req.body);
+
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+
+      if (!orgId || !userId) {
+        return res.status(400).json({ error: "No organization or user context" });
+      }
+
+      // Security: Prevent directory traversal
+      if (filePath.includes("..") || filePath.startsWith("/")) {
+        return res.status(400).json({ error: "Invalid file path" });
+      }
+
+      // Create the proposal with pending status
+      const proposal = await storage.createAgentProposal({
+        suggestionId: suggestionId || null,
+        filePath,
+        originalContent,
+        proposedContent,
+        status: "pending",
+        approvedBy: null,
+      });
+
+      await storage.createAuditLog({
+        orgId,
+        userId,
+        action: "agent_dev_proposal_created",
+        target: filePath,
+        detailJson: {
+          proposalId: proposal.id,
+          description,
+          originalLength: originalContent.length,
+          proposedLength: proposedContent.length,
+        },
+      });
+
+      res.json({
+        success: true,
+        proposalId: proposal.id,
+        message: "Proposal created successfully. Review and approve to apply changes.",
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors.map(e => e.message).join(", ") });
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to create proposal" });
+    }
+  });
+
+  // List proposals
+  app.get("/api/agent-dev/proposals", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      if (!orgId) {
+        return res.status(400).json({ error: "No organization set" });
+      }
+
+      const { status } = z.object({
+        status: z.enum(["pending", "approved", "rejected", "applied"]).optional(),
+      }).parse(req.query);
+
+      const proposals = await storage.getAgentProposalsByOrg(orgId, status);
+      res.json(proposals);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to fetch proposals" });
+    }
+  });
+
+  // Approve a proposal
+  app.post("/api/agent-dev/proposals/:id/approve", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+
+      if (!orgId || !userId) {
+        return res.status(400).json({ error: "No organization or user context" });
+      }
+
+      const proposal = await storage.getAgentProposal(id);
+      if (!proposal) {
+        return res.status(404).json({ error: "Proposal not found" });
+      }
+
+      if (proposal.status !== "pending") {
+        return res.status(400).json({ error: "Proposal is not pending" });
+      }
+
+      // Apply the changes to the file
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      
+      // Secure path validation using resolve and relative
+      const projectRoot = process.cwd();
+      const resolvedPath = path.resolve(projectRoot, proposal.filePath);
+      const relativePath = path.relative(projectRoot, resolvedPath);
+      
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        return res.status(403).json({ error: "Access denied: path outside project" });
+      }
+      
+      const safePath = resolvedPath;
+
+      try {
+        await fs.writeFile(safePath, proposal.proposedContent, "utf-8");
+      } catch (err) {
+        return res.status(500).json({ error: "Failed to write file" });
+      }
+
+      const updated = await storage.updateAgentProposalStatus(id, "applied", userId);
+
+      await storage.createAuditLog({
+        orgId,
+        userId,
+        action: "agent_dev_proposal_approved",
+        target: proposal.filePath,
+        detailJson: { proposalId: id },
+      });
+
+      res.json({ success: true, proposal: updated });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to approve proposal" });
+    }
+  });
+
+  // Reject a proposal
+  app.post("/api/agent-dev/proposals/:id/reject", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+
+      if (!orgId || !userId) {
+        return res.status(400).json({ error: "No organization or user context" });
+      }
+
+      // Parse optional reason from body
+      const { reason } = z.object({
+        reason: z.string().optional(),
+      }).parse(req.body || {});
+
+      const proposal = await storage.getAgentProposal(id);
+      if (!proposal) {
+        return res.status(404).json({ error: "Proposal not found" });
+      }
+
+      if (proposal.status !== "pending") {
+        return res.status(400).json({ error: "Proposal is not pending" });
+      }
+
+      const updated = await storage.updateAgentProposalStatus(id, "rejected", userId);
+
+      await storage.createAuditLog({
+        orgId,
+        userId,
+        action: "agent_dev_proposal_rejected",
+        target: proposal.filePath,
+        detailJson: { proposalId: id, reason: reason || null },
+      });
+
+      res.json({ success: true, proposal: updated });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to reject proposal" });
+    }
+  });
+
   return httpServer;
 }
