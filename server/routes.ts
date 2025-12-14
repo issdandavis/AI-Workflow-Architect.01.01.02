@@ -6,6 +6,7 @@ import { authLimiter, apiLimiter, agentLimiter } from "./middleware/rateLimiter"
 import { checkBudget } from "./middleware/costGovernor";
 import { orchestratorQueue } from "./services/orchestrator";
 import { createMcpRouter } from "./mcp";
+import { getZapierMcpClient, testZapierMcpConnection } from "./services/zapierMcpClient";
 import { z } from "zod";
 import { insertUserSchema, insertOrgSchema, insertProjectSchema, insertIntegrationSchema, insertMemoryItemSchema } from "@shared/schema";
 import crypto from "crypto";
@@ -538,6 +539,141 @@ export async function registerRoutes(
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch run status" });
+    }
+  });
+
+  // ===== ZAPIER MCP CLIENT ROUTES =====
+
+  app.post("/api/zapier-mcp/test", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { endpoint } = z.object({ endpoint: z.string().url() }).parse(req.body);
+      const result = await testZapierMcpConnection(endpoint);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.post("/api/zapier-mcp/connect", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      if (!orgId) {
+        return res.status(400).json({ error: "No organization set" });
+      }
+
+      const { endpoint, name } = z.object({
+        endpoint: z.string().url(),
+        name: z.string().optional(),
+      }).parse(req.body);
+
+      const result = await testZapierMcpConnection(endpoint);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || "Connection failed" });
+      }
+
+      const integration = await storage.createIntegration({
+        orgId,
+        provider: "zapier-mcp",
+        status: "connected",
+        metadataJson: {
+          endpoint,
+          name: name || "Zapier MCP",
+          toolCount: result.tools?.length || 0,
+          connectedAt: new Date().toISOString(),
+        },
+      });
+
+      await storage.createAuditLog({
+        orgId,
+        userId: req.session.userId || null,
+        action: "zapier_mcp_connected",
+        target: "zapier-mcp",
+        detailJson: { integrationId: integration.id, endpoint, toolCount: result.tools?.length || 0 },
+      });
+
+      res.json({
+        success: true,
+        integration,
+        tools: result.tools,
+      });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.get("/api/zapier-mcp/tools", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      if (!orgId) {
+        return res.status(400).json({ error: "No organization set" });
+      }
+
+      const integrations = await storage.getIntegrations(orgId);
+      const zapierIntegration = integrations.find(i => i.provider === "zapier-mcp" && i.status === "connected");
+
+      if (!zapierIntegration) {
+        return res.json({ connected: false, tools: [] });
+      }
+
+      const metadata = zapierIntegration.metadataJson as { endpoint?: string } | null;
+      if (!metadata?.endpoint) {
+        return res.json({ connected: false, tools: [], error: "No endpoint configured" });
+      }
+
+      try {
+        const client = getZapierMcpClient(metadata.endpoint);
+        const tools = await client.listTools();
+        res.json({ connected: true, tools });
+      } catch (error) {
+        res.json({
+          connected: true,
+          tools: [],
+          error: error instanceof Error ? error.message : "Failed to fetch tools",
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch Zapier tools" });
+    }
+  });
+
+  app.post("/api/zapier-mcp/call", requireAuth, agentLimiter, checkBudget, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      if (!orgId) {
+        return res.status(400).json({ error: "No organization set" });
+      }
+
+      const { tool, args } = z.object({
+        tool: z.string(),
+        args: z.record(z.unknown()).optional(),
+      }).parse(req.body);
+
+      const integrations = await storage.getIntegrations(orgId);
+      const zapierIntegration = integrations.find(i => i.provider === "zapier-mcp" && i.status === "connected");
+
+      if (!zapierIntegration) {
+        return res.status(400).json({ error: "Zapier MCP not connected" });
+      }
+
+      const metadata = zapierIntegration.metadataJson as { endpoint?: string } | null;
+      if (!metadata?.endpoint) {
+        return res.status(400).json({ error: "No endpoint configured" });
+      }
+
+      const client = getZapierMcpClient(metadata.endpoint);
+      const result = await client.callTool(tool, args || {});
+
+      await storage.createAuditLog({
+        orgId,
+        userId: req.session.userId || null,
+        action: "zapier_mcp_tool_call",
+        target: tool,
+        detailJson: { args, isError: result.isError },
+      });
+
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Tool call failed" });
     }
   });
 
