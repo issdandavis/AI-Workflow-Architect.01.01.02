@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword, requireAuth, attachUser, validateApiKey }
 import { authLimiter, apiLimiter, agentLimiter } from "./middleware/rateLimiter";
 import { checkBudget } from "./middleware/costGovernor";
 import { orchestratorQueue } from "./services/orchestrator";
+import { createMcpRouter } from "./mcp";
 import { z } from "zod";
 import { insertUserSchema, insertOrgSchema, insertProjectSchema, insertIntegrationSchema, insertMemoryItemSchema } from "@shared/schema";
 import crypto from "crypto";
@@ -29,6 +30,9 @@ export async function registerRoutes(
   
   // Attach user to all requests
   app.use(attachUser);
+
+  // MCP Protocol endpoint
+  app.use("/mcp", createMcpRouter());
 
   // Health endpoint
   app.get("/api/health", (req, res) => {
