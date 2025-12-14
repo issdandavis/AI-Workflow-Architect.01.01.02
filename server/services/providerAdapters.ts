@@ -21,7 +21,7 @@ export interface ProviderAdapter {
 class BaseProviderAdapter implements ProviderAdapter {
   constructor(
     public name: string,
-    private apiKey: string | undefined,
+    protected apiKey: string | undefined,
   ) {}
 
   async call(prompt: string, model: string): Promise<ProviderResponse> {
@@ -49,17 +49,166 @@ export class OpenAIAdapter extends BaseProviderAdapter {
   constructor(apiKey: string | undefined) {
     super("OpenAI", apiKey);
   }
+
+  async call(prompt: string, model: string): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      return {
+        success: false,
+        error: "OpenAI API key not configured. Please add the API key in Settings > API Keys.",
+      };
+    }
+
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model || "gpt-4o",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error?.message || "OpenAI API error",
+        };
+      }
+
+      const content = data.choices?.[0]?.message?.content || "";
+
+      return {
+        success: true,
+        content,
+        usage: {
+          inputTokens: data.usage?.prompt_tokens || 0,
+          outputTokens: data.usage?.completion_tokens || 0,
+          costEstimate: "0.0003",
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
 }
 
 export class AnthropicAdapter extends BaseProviderAdapter {
   constructor(apiKey: string | undefined) {
     super("Anthropic", apiKey);
   }
+
+  async call(prompt: string, model: string): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      return {
+        success: false,
+        error: "Anthropic API key not configured. Please add the API key in Settings > API Keys.",
+      };
+    }
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: model || "claude-sonnet-4-20250514",
+          max_tokens: 4096,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error?.message || "Anthropic API error",
+        };
+      }
+
+      const content = data.content?.[0]?.text || "";
+
+      return {
+        success: true,
+        content,
+        usage: {
+          inputTokens: data.usage?.input_tokens || 0,
+          outputTokens: data.usage?.output_tokens || 0,
+          costEstimate: "0.0004",
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
 }
 
 export class XAIAdapter extends BaseProviderAdapter {
   constructor(apiKey: string | undefined) {
     super("xAI", apiKey);
+  }
+
+  async call(prompt: string, model: string): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      return {
+        success: false,
+        error: "xAI API key not configured. Please add the API key in Settings > API Keys.",
+      };
+    }
+
+    try {
+      const response = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model || "grok-2",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error?.message || "xAI API error",
+        };
+      }
+
+      const content = data.choices?.[0]?.message?.content || "";
+
+      return {
+        success: true,
+        content,
+        usage: {
+          inputTokens: data.usage?.prompt_tokens || 0,
+          outputTokens: data.usage?.completion_tokens || 0,
+          costEstimate: "0.0003",
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
   }
 }
 
