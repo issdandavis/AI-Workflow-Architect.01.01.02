@@ -1277,5 +1277,253 @@ export async function registerRoutes(
     }
   });
 
+  // ===== ROUNDTABLE ROUTES =====
+
+  // Get available AI providers
+  app.get("/api/roundtable/providers", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { AI_CONFIGS } = await import("./services/roundtableCoordinator");
+      const providers = Object.entries(AI_CONFIGS).map(([id, config]) => ({
+        id,
+        name: config.name,
+        role: config.role,
+        signOff: config.signOff,
+      }));
+      res.json(providers);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get providers" });
+    }
+  });
+
+  // Create a new roundtable session
+  app.post("/api/roundtable/sessions", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      if (!orgId) {
+        return res.status(400).json({ error: "No organization set" });
+      }
+
+      const { AI_CONFIGS } = await import("./services/roundtableCoordinator");
+      const validProviders = Object.keys(AI_CONFIGS);
+
+      const { title, topic, activeProviders, orchestrationMode, maxTurns, projectId } = z.object({
+        title: z.string().min(1),
+        topic: z.string().optional(),
+        activeProviders: z.array(z.string()).min(1).refine(
+          (providers) => providers.every(p => validProviders.includes(p)),
+          { message: "Invalid provider specified" }
+        ),
+        orchestrationMode: z.enum(["round-robin", "free-form", "moderated"]).default("round-robin"),
+        maxTurns: z.number().min(1).max(100).default(20),
+        projectId: z.string().optional(),
+      }).parse(req.body);
+
+      if (projectId) {
+        const project = await storage.getProject(projectId);
+        if (!project || project.orgId !== orgId) {
+          return res.status(403).json({ error: "Unauthorized access to project" });
+        }
+      }
+
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const session = await storage.createRoundtableSession({
+        orgId,
+        projectId: projectId || null,
+        title,
+        topic: topic || null,
+        activeProviders,
+        orchestrationMode,
+        maxTurns,
+        status: "active",
+        createdBy: userId,
+      });
+
+      await storage.createAuditLog({
+        orgId,
+        userId: req.session.userId || null,
+        action: "roundtable_session_created",
+        target: session.id,
+        detailJson: { title, providers: activeProviders },
+      });
+
+      res.json(session);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // List roundtable sessions
+  app.get("/api/roundtable/sessions", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      if (!orgId) {
+        return res.status(400).json({ error: "No organization set" });
+      }
+
+      const sessions = await storage.getRoundtableSessions(orgId);
+      res.json(sessions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch sessions" });
+    }
+  });
+
+  // Get a specific session with messages
+  app.get("/api/roundtable/sessions/:id", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const session = await storage.getRoundtableSession(id);
+      
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (session.orgId !== req.session.orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const messages = await storage.getRoundtableMessages(id);
+      res.json({ ...session, messages });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch session" });
+    }
+  });
+
+  // Add a user message to a session
+  app.post("/api/roundtable/sessions/:id/message", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { content } = z.object({
+        content: z.string().min(1).max(10000),
+      }).parse(req.body);
+
+      const session = await storage.getRoundtableSession(id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (session.orgId !== req.session.orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (session.status !== "active") {
+        return res.status(400).json({ error: "Session is not active" });
+      }
+
+      const sequenceNumber = await storage.getNextSequenceNumber(id);
+      const message = await storage.createRoundtableMessage({
+        sessionId: id,
+        senderType: "user",
+        senderId: req.session.userId || null,
+        provider: null,
+        model: null,
+        content,
+        signature: null,
+        sequenceNumber,
+        tokensUsed: null,
+        responseTimeMs: null,
+        metadata: null,
+      });
+
+      res.json(message);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  // Trigger a single AI's turn
+  app.post("/api/roundtable/sessions/:id/ai-turn", requireAuth, agentLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { provider } = z.object({
+        provider: z.string(),
+      }).parse(req.body);
+
+      const session = await storage.getRoundtableSession(id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (session.orgId !== req.session.orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (session.status !== "active") {
+        return res.status(400).json({ error: "Session is not active" });
+      }
+
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const { processAITurn } = await import("./services/roundtableCoordinator");
+      const message = await processAITurn(id, provider, userId);
+
+      res.json(message);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "AI turn failed" });
+    }
+  });
+
+  // Run a full round of all active AIs
+  app.post("/api/roundtable/sessions/:id/round", requireAuth, agentLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const session = await storage.getRoundtableSession(id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (session.orgId !== req.session.orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (session.status !== "active") {
+        return res.status(400).json({ error: "Session is not active" });
+      }
+
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const { runRoundtableRound } = await import("./services/roundtableCoordinator");
+      const messages = await runRoundtableRound(id, userId);
+
+      res.json(messages);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Round failed" });
+    }
+  });
+
+  // Update session status (pause/resume/complete)
+  app.patch("/api/roundtable/sessions/:id", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { status } = z.object({
+        status: z.enum(["active", "paused", "completed"]),
+      }).parse(req.body);
+
+      const session = await storage.getRoundtableSession(id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (session.orgId !== req.session.orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const updated = await storage.updateRoundtableSession(id, { status });
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
   return httpServer;
 }

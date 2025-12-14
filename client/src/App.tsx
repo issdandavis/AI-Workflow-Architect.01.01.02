@@ -14,6 +14,7 @@ import Settings from "@/pages/Settings";
 import Integrations from "@/pages/Integrations";
 import Agents from "@/pages/Agents";
 import Usage from "@/pages/Usage";
+import Roundtable from "@/pages/Roundtable";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/integrations" component={Integrations} />
       <Route path="/agents" component={Agents} />
       <Route path="/usage" component={Usage} />
+      <Route path="/roundtable" component={Roundtable} />
       
       <Route component={NotFound} />
     </Switch>
