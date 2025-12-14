@@ -67,6 +67,55 @@ export class PerplexityAdapter extends BaseProviderAdapter {
   constructor(apiKey: string | undefined) {
     super("Perplexity", apiKey);
   }
+
+  async call(prompt: string, model: string): Promise<ProviderResponse> {
+    if (!process.env.PERPLEXITY_API_KEY) {
+      return {
+        success: false,
+        error: "Perplexity API key not configured. Please add PERPLEXITY_API_KEY in Secrets.",
+      };
+    }
+
+    try {
+      const response = await fetch("https://api.perplexity.ai/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: model || "sonar",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error?.message || "Perplexity API error",
+        };
+      }
+
+      const content = data.choices?.[0]?.message?.content || "";
+
+      return {
+        success: true,
+        content,
+        usage: {
+          inputTokens: data.usage?.prompt_tokens || 0,
+          outputTokens: data.usage?.completion_tokens || 0,
+          costEstimate: "0.0002",
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
 }
 
 export class GeminiAdapter extends BaseProviderAdapter {
