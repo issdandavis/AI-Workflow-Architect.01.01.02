@@ -71,6 +71,7 @@ interface SocialLinks {
   hashnode?: string;
   codepen?: string;
   stackoverflow?: string;
+  figma?: string;
 }
 
 export default function Settings() {
@@ -792,6 +793,13 @@ export default function Settings() {
                       Pinterest
                     </Label>
                     <Input id="pinterest" placeholder="https://pinterest.com/you" value={socialLinks.pinterest || ""} onChange={(e) => setSocialLinks({ ...socialLinks, pinterest: e.target.value })} data-testid="input-pinterest" className="h-9" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="figma" className="flex items-center gap-2 text-xs">
+                      <span className="w-4 h-4 rounded bg-purple-500 flex items-center justify-center text-white text-[10px] font-bold">F</span>
+                      Figma
+                    </Label>
+                    <Input id="figma" placeholder="https://figma.com/@you" value={socialLinks.figma || ""} onChange={(e) => setSocialLinks({ ...socialLinks, figma: e.target.value })} data-testid="input-figma" className="h-9" />
                   </div>
                 </div>
               </div>

@@ -3812,6 +3812,7 @@ Format your response as JSON with the following structure:
           hashnode: z.string().url().optional().or(z.literal("")),
           codepen: z.string().url().optional().or(z.literal("")),
           stackoverflow: z.string().url().optional().or(z.literal("")),
+          figma: z.string().url().optional().or(z.literal("")),
         }).optional(),
       }).parse(req.body);
 
