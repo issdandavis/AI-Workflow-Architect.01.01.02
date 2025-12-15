@@ -3063,7 +3063,7 @@ export async function registerRoutes(
     try {
       const { prompt, provider, model, conversationHistory } = z.object({
         prompt: z.string().min(1, "Prompt is required").max(10000),
-        provider: z.enum(["openai", "anthropic", "xai", "perplexity", "google"]),
+        provider: z.enum(["openai", "anthropic", "xai", "perplexity", "google", "huggingface"]),
         model: z.string().optional(),
         conversationHistory: z.array(z.object({
           role: z.enum(["user", "assistant"]),
@@ -3112,6 +3112,56 @@ export async function registerRoutes(
           outputTokens: result.usage.outputTokens,
         } : undefined,
         provider,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          error: error.errors.map(e => e.message).join(", "),
+        });
+      }
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "An unexpected error occurred",
+      });
+    }
+  });
+
+  // ===== HUGGINGFACE AI ROUTES =====
+
+  app.post("/api/ai/huggingface", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { prompt, model } = z.object({
+        prompt: z.string().min(1, "Prompt is required").max(10000),
+        model: z.string().optional(),
+      }).parse(req.body);
+
+      const { generateWithHuggingFace, getRateLimitStatus } = await import("./services/huggingfaceClient");
+      
+      const result = await generateWithHuggingFace(prompt, model);
+
+      if (!result.success) {
+        return res.status(400).json({ 
+          error: result.error,
+          rateLimitStatus: getRateLimitStatus(),
+        });
+      }
+
+      await storage.createAuditLog({
+        orgId: req.session.orgId!,
+        userId: req.session.userId || null,
+        action: "huggingface_generate",
+        target: model || "meta-llama/Meta-Llama-3-8B-Instruct",
+        detailJson: { 
+          promptLength: prompt.length,
+          inputTokens: result.usage?.inputTokens,
+          outputTokens: result.usage?.outputTokens,
+        },
+      });
+
+      res.json({
+        content: result.content,
+        usage: result.usage,
+        provider: "huggingface",
+        rateLimitStatus: getRateLimitStatus(),
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

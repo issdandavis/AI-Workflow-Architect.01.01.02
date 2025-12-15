@@ -23,6 +23,7 @@ import Admin from "@/pages/Admin";
 import Status from "@/pages/Status";
 import Logs from "@/pages/Logs";
 import Workflows from "@/pages/Workflows";
+import Workspaces from "@/pages/Workspaces";
 import Gallery from "@/pages/Gallery";
 
 const PUBLIC_ROUTES = ["/", "/shop", "/login", "/signup", "/gallery"];
@@ -53,6 +54,7 @@ function Router() {
       <Route path="/status" component={Status} />
       <Route path="/logs" component={Logs} />
       <Route path="/workflows" component={Workflows} />
+      <Route path="/workspaces" component={Workspaces} />
       
       <Route component={NotFound} />
     </Switch>

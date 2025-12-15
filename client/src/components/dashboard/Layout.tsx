@@ -15,7 +15,8 @@ import {
   Cloud,
   LogOut,
   Globe,
-  BarChart3
+  BarChart3,
+  FolderKanban
 } from "lucide-react";
 import bgImage from "@assets/generated_images/dark_abstract_neural_network_background_for_ai_dashboard.png";
 import { ShopifyBanner } from "@/components/ShopifyBanner";
@@ -33,6 +34,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { icon: LayoutDashboard, label: "Command Deck", href: "/dashboard" },
     { icon: Code2, label: "Coding Studio", href: "/studio" },
     { icon: Bot, label: "AI Agents", href: "/agents" },
+    { icon: FolderKanban, label: "Workspaces", href: "/workspaces" },
     { icon: HardDrive, label: "Storage", href: "/storage" },
     { icon: Network, label: "Integrations", href: "/integrations" },
     { icon: BarChart3, label: "Usage & Costs", href: "/usage" },

@@ -321,6 +321,17 @@ export class GeminiAdapter extends BaseProviderAdapter {
   }
 }
 
+export class HuggingFaceAdapter extends BaseProviderAdapter {
+  constructor() {
+    super("HuggingFace", "free");
+  }
+
+  async call(prompt: string, model: string): Promise<ProviderResponse> {
+    const { generateWithHuggingFace } = await import("./huggingfaceClient");
+    return generateWithHuggingFace(prompt, model || "meta-llama/Meta-Llama-3-8B-Instruct");
+  }
+}
+
 // Factory to get the right adapter
 // If apiKey is provided, use it; otherwise fall back to process.env
 export function getProviderAdapter(provider: string, apiKey?: string): ProviderAdapter {
@@ -344,6 +355,8 @@ export function getProviderAdapter(provider: string, apiKey?: string): ProviderA
     case "google":
     case "gemini":
       return new GeminiAdapter(apiKey || envApiKeys.google);
+    case "huggingface":
+      return new HuggingFaceAdapter();
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }

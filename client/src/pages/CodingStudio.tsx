@@ -55,11 +55,12 @@ interface GenerateResponse {
 }
 
 const PROVIDERS = [
-  { id: "openai", name: "OpenAI", model: "gpt-4o" },
-  { id: "anthropic", name: "Anthropic", model: "claude-sonnet-4-20250514" },
-  { id: "xai", name: "xAI (Grok)", model: "grok-2" },
-  { id: "perplexity", name: "Perplexity", model: "sonar" },
-  { id: "google", name: "Google Gemini", model: "gemini-2.0-flash" },
+  { id: "google", name: "Gemini (Free)", model: "gemini-2.0-flash" },
+  { id: "huggingface", name: "HuggingFace Llama (Free)", model: "meta-llama/Meta-Llama-3-8B-Instruct" },
+  { id: "anthropic", name: "Claude (Your API Key)", model: "claude-sonnet-4-20250514" },
+  { id: "perplexity", name: "Perplexity (Your API Key)", model: "sonar" },
+  { id: "openai", name: "OpenAI (Your API Key)", model: "gpt-4o" },
+  { id: "xai", name: "xAI Grok (Your API Key)", model: "grok-2" },
 ];
 
 const YOUTUBE_URL_STORAGE_KEY = "codingStudio_youtubeUrl";
