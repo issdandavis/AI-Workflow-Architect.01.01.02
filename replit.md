@@ -94,6 +94,63 @@ All integrations are managed securely through **Replit's Secrets tab** (lock ico
 
 ---
 
+### ✅ NEW: Admin & Maintenance Features (December 2025)
+
+#### Super Admin Dashboard (`/admin`)
+- [x] User list table with email, role, organizations, created date
+- [x] Global stats: Total Users, Total Orgs, Total Tokens, Total Cost
+- [x] Delete user functionality with confirmation
+- [x] Protected by requireAdmin middleware (owner/admin only)
+
+**Key files:**
+- `client/src/pages/Admin.tsx`
+- `server/routes.ts` - `/api/admin/*` routes
+
+#### System Status Page (`/status`)
+- [x] Provider status cards for OpenAI, Anthropic, Google, Gemini, Perplexity, xAI
+- [x] Circuit breaker status (green/red indicators)
+- [x] Failure count display
+- [x] Reset Circuit buttons (individual and "Reset All")
+- [x] Auto-refresh every 30 seconds
+
+**Key file:** `client/src/pages/Status.tsx`
+
+#### Flight Recorder / Audit Log Viewer (`/logs`)
+- [x] Searchable audit log table
+- [x] Filter by action type (integration, credential, decision, etc.)
+- [x] Date range filter (Today, 7 days, 30 days, All time)
+- [x] Detail modal for viewing full JSON details
+- [x] Admin-only access
+
+**Key file:** `client/src/pages/Logs.tsx`
+
+#### Data Export ("Panic Button")
+- [x] Export All Data button in Settings page
+- [x] Downloads sanitized JSON backup (no password hashes)
+- [x] Includes: users, orgs, projects, agentRuns, usageRecords, auditLogs, roundtables, integrations
+- [x] Admin-only access
+
+**Key files:**
+- `client/src/pages/Settings.tsx` - Export section
+- `server/routes.ts` - `GET /api/admin/export`
+
+#### Workflow Builder (`/workflows`)
+- [x] Full CRUD for automated workflows
+- [x] Step builder (AI provider + prompt pairs)
+- [x] Trigger types: Manual, Schedule, Webhook
+- [x] Status: Active, Paused, Draft
+- [x] Run Now button for manual execution
+- [x] Dashboard shows real workflows (clickable)
+
+**Key files:**
+- `shared/schema.ts` - `workflows`, `workflowRuns` tables
+- `server/storage.ts` - Workflow storage methods
+- `server/routes.ts` - `/api/workflows/*` routes
+- `client/src/pages/Workflows.tsx`
+- `client/src/pages/Dashboard.tsx` - Active Workflows section
+
+---
+
 ### 🔲 TODO - FEATURES TO BUILD
 
 #### ✅ COMPLETED: Storage Hub
