@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { User, Key, Trash2, Plus, Loader2, CheckCircle, AlertCircle, BarChart3, Download, AlertTriangle, Shield, Smartphone, QrCode } from "lucide-react";
+import { User, Key, Trash2, Plus, Loader2, CheckCircle, AlertCircle, BarChart3, Download, AlertTriangle, Shield, Smartphone, QrCode, Link2, ExternalLink } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +40,15 @@ interface UsageSummary {
   periodDays: number;
 }
 
+interface SocialLinks {
+  linktree?: string;
+  orchid?: string;
+  twitter?: string;
+  github?: string;
+  linkedin?: string;
+  website?: string;
+}
+
 export default function Settings() {
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
@@ -53,10 +62,14 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  
+  const [socialLinks, setSocialLinks] = useState<SocialLinks>({});
+  const [savingSocial, setSavingSocial] = useState(false);
 
   useEffect(() => {
     loadCredentials();
     loadUsage();
+    loadProfile();
   }, []);
 
   async function loadCredentials() {
@@ -83,6 +96,45 @@ export default function Settings() {
       }
     } catch (err) {
       console.error("Failed to load usage:", err);
+    }
+  }
+
+  async function loadProfile() {
+    try {
+      const res = await fetch("/api/profile");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.profile?.socialLinks) {
+          setSocialLinks(data.profile.socialLinks);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load profile:", err);
+    }
+  }
+
+  async function handleSaveSocialLinks() {
+    setSavingSocial(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ socialLinks }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to save social links");
+      }
+
+      setSuccess("Social links saved successfully");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save social links");
+    } finally {
+      setSavingSocial(false);
     }
   }
 
@@ -515,6 +567,147 @@ export default function Settings() {
                     QR sign-in sessions expire after 5 minutes for security. You'll need 2FA enabled to use this feature.
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Social Links Section */}
+            <div className="glass-panel p-6 rounded-2xl space-y-6" data-testid="section-social-links">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-5 h-5 text-primary" />
+                <h2 className="text-xl font-bold">Social Links</h2>
+              </div>
+
+              <Separator />
+
+              <p className="text-sm text-muted-foreground">
+                Add your Linktree, Orchid, and other social profile links. These will be displayed on your public profile.
+              </p>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="linktree" className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-gradient-to-r from-green-400 to-emerald-500 flex items-center justify-center text-white text-xs font-bold">L</span>
+                    Linktree
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="linktree"
+                      placeholder="https://linktr.ee/yourusername"
+                      value={socialLinks.linktree || ""}
+                      onChange={(e) => setSocialLinks({ ...socialLinks, linktree: e.target.value })}
+                      data-testid="input-linktree"
+                    />
+                    {socialLinks.linktree && (
+                      <a 
+                        href={socialLinks.linktree} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 transition"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="orchid" className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-gradient-to-r from-purple-400 to-pink-500 flex items-center justify-center text-white text-xs font-bold">O</span>
+                    Orchid
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="orchid"
+                      placeholder="https://orchid.id/yourusername"
+                      value={socialLinks.orchid || ""}
+                      onChange={(e) => setSocialLinks({ ...socialLinks, orchid: e.target.value })}
+                      data-testid="input-orchid"
+                    />
+                    {socialLinks.orchid && (
+                      <a 
+                        href={socialLinks.orchid} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 transition"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="twitter" className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-black flex items-center justify-center text-white text-xs font-bold">𝕏</span>
+                    Twitter / X
+                  </Label>
+                  <Input
+                    id="twitter"
+                    placeholder="https://twitter.com/yourusername"
+                    value={socialLinks.twitter || ""}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, twitter: e.target.value })}
+                    data-testid="input-twitter"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="github" className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-gray-800 flex items-center justify-center text-white text-xs font-bold">GH</span>
+                    GitHub
+                  </Label>
+                  <Input
+                    id="github"
+                    placeholder="https://github.com/yourusername"
+                    value={socialLinks.github || ""}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, github: e.target.value })}
+                    data-testid="input-github"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="linkedin" className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-white text-xs font-bold">in</span>
+                    LinkedIn
+                  </Label>
+                  <Input
+                    id="linkedin"
+                    placeholder="https://linkedin.com/in/yourusername"
+                    value={socialLinks.linkedin || ""}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, linkedin: e.target.value })}
+                    data-testid="input-linkedin"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="website" className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold">W</span>
+                    Personal Website
+                  </Label>
+                  <Input
+                    id="website"
+                    placeholder="https://yourwebsite.com"
+                    value={socialLinks.website || ""}
+                    onChange={(e) => setSocialLinks({ ...socialLinks, website: e.target.value })}
+                    data-testid="input-website"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/10">
+                <Button
+                  onClick={handleSaveSocialLinks}
+                  disabled={savingSocial}
+                  data-testid="button-save-social-links"
+                >
+                  {savingSocial ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Social Links"
+                  )}
+                </Button>
               </div>
             </div>
           </div>

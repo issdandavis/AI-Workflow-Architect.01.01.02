@@ -3763,5 +3763,56 @@ Format your response as JSON with the following structure:
     }
   });
 
+  // ===== USER PROFILE & SOCIAL LINKS =====
+
+  app.get("/api/profile", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const profile = await storage.getUserProfile(userId);
+      res.json({ profile: profile || null });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get profile" });
+    }
+  });
+
+  app.post("/api/profile", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId!;
+      const { displayName, bio, socialLinks } = z.object({
+        displayName: z.string().optional(),
+        bio: z.string().optional(),
+        socialLinks: z.object({
+          linktree: z.string().url().optional().or(z.literal("")),
+          orchid: z.string().url().optional().or(z.literal("")),
+          twitter: z.string().url().optional().or(z.literal("")),
+          github: z.string().url().optional().or(z.literal("")),
+          linkedin: z.string().url().optional().or(z.literal("")),
+          website: z.string().url().optional().or(z.literal("")),
+        }).optional(),
+      }).parse(req.body);
+
+      let profile = await storage.getUserProfile(userId);
+      
+      const profileData = {
+        displayName,
+        bio,
+        socialLinks: socialLinks || {},
+      };
+
+      if (profile) {
+        profile = await storage.updateUserProfile(userId, profileData);
+      } else {
+        profile = await storage.createUserProfile({
+          userId,
+          ...profileData,
+        });
+      }
+
+      res.json({ profile });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to update profile" });
+    }
+  });
+
   return httpServer;
 }
