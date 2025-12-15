@@ -10,6 +10,7 @@ import { retryService } from "./services/retryService";
 import { processGuideAgentRequest } from "./services/guideAgent";
 import { createMcpRouter } from "./mcp";
 import { getZapierMcpClient, testZapierMcpConnection } from "./services/zapierMcpClient";
+import { getFigmaMcpClient } from "./services/figmaMcpClient";
 import { dispatchEvent, generateSecretKey, getSampleData, SUPPORTED_EVENTS, type ZapierEventType } from "./services/zapierService";
 import { z } from "zod";
 import { insertUserSchema, insertOrgSchema, insertProjectSchema, insertIntegrationSchema, insertMemoryItemSchema, insertWorkspaceSchema } from "@shared/schema";
@@ -51,6 +52,52 @@ export async function registerRoutes(
       time: new Date().toISOString(),
       version: VERSION,
     });
+  });
+
+  // ===== FIGMA DESIGN PREVIEW ROUTE =====
+
+  app.post("/api/figma/screenshot", apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { fileKey, nodeId } = z.object({
+        fileKey: z.string().min(1, "File key is required"),
+        nodeId: z.string().min(1, "Node ID is required"),
+      }).parse(req.body);
+
+      const figmaClient = getFigmaMcpClient();
+      if (!figmaClient) {
+        return res.status(503).json({ 
+          error: "Figma MCP not configured", 
+          message: "The Figma integration is not set up. Please configure the MCP_FIGMA_URL environment variable." 
+        });
+      }
+
+      const result = await figmaClient.getScreenshot(fileKey, nodeId);
+
+      if (!result.success) {
+        return res.status(400).json({ 
+          error: "Failed to fetch screenshot", 
+          message: result.error 
+        });
+      }
+
+      res.json({
+        success: true,
+        imageData: result.imageData,
+        mimeType: result.mimeType || "image/png",
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          error: "Invalid request", 
+          message: error.errors.map(e => e.message).join(", ") 
+        });
+      }
+      console.error("[Figma Screenshot] Error:", error);
+      res.status(500).json({ 
+        error: "Failed to fetch Figma screenshot",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
   });
 
   // ===== AI PROVIDERS ROUTE =====
