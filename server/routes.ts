@@ -254,6 +254,52 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/auth/change-password", requireAuth, authLimiter, async (req: Request, res: Response) => {
+    try {
+      const { currentPassword, newPassword } = z.object({
+        currentPassword: z.string().min(1, "Current password is required"),
+        newPassword: z.string().min(8, "New password must be at least 8 characters"),
+      }).parse(req.body);
+
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Verify current password (skip for guest or OAuth users without password)
+      if (user.passwordHash && user.passwordHash !== "GUEST_NO_PASSWORD") {
+        const valid = await verifyPassword(currentPassword, user.passwordHash);
+        if (!valid) {
+          return res.status(401).json({ error: "Current password is incorrect" });
+        }
+      }
+
+      // Hash and update new password
+      const newHash = await hashPassword(newPassword);
+      await storage.updateUserPassword(userId, newHash);
+
+      await storage.createAuditLog({
+        orgId: req.session.orgId!,
+        userId,
+        action: "password_changed",
+        target: user.email,
+        detailJson: null,
+      });
+
+      res.json({ success: true, message: "Password changed successfully" });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors[0].message });
+      }
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to change password" });
+    }
+  });
+
   app.post("/api/auth/logout", requireAuth, (req: Request, res: Response) => {
     req.session.destroy((err) => {
       if (err) {

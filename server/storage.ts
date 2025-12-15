@@ -38,6 +38,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   upsertUser(userData: UpsertUser): Promise<User>;
   updateUserLoginAttempts(userId: string, failedAttempts: number, lockedUntil: Date | null): Promise<void>;
+  updateUserPassword(userId: string, passwordHash: string): Promise<void>;
   
   // Orgs
   getOrg(id: string): Promise<Org | undefined>;
@@ -281,6 +282,13 @@ export class DbStorage implements IStorage {
     await db
       .update(users)
       .set({ failedAttempts, lockedUntil })
+      .where(eq(users.id, userId));
+  }
+
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ passwordHash })
       .where(eq(users.id, userId));
   }
 
