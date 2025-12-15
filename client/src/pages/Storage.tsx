@@ -323,11 +323,42 @@ Help them find relevant files. If you find matches, list them. If not, suggest w
           </div>
         ) : connectedProviders.length === 0 ? (
           <div className="glass-panel p-12 rounded-2xl text-center">
-            <AlertCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-xl font-semibold mb-2">No Storage Providers Connected</h2>
-            <p className="text-muted-foreground mb-4">
-              Connect your cloud storage accounts to get started.
+            <Cloud className="w-16 h-16 mx-auto mb-4 text-blue-400" />
+            <h2 className="text-xl font-semibold mb-2">Connect Your Cloud Storage</h2>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              Link your Google Drive, OneDrive, or Dropbox to access and manage your files from one place.
             </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto mb-6">
+              <div className="glass-panel p-4 rounded-xl border border-red-500/20">
+                <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-3">
+                  <HardDrive className="w-5 h-5 text-red-400" />
+                </div>
+                <h3 className="font-medium text-sm">Google Drive</h3>
+                <p className="text-xs text-muted-foreground mt-1">15 GB free storage</p>
+              </div>
+              <div className="glass-panel p-4 rounded-xl border border-blue-500/20">
+                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
+                  <Cloud className="w-5 h-5 text-blue-400" />
+                </div>
+                <h3 className="font-medium text-sm">OneDrive</h3>
+                <p className="text-xs text-muted-foreground mt-1">5 GB free storage</p>
+              </div>
+              <div className="glass-panel p-4 rounded-xl border border-indigo-500/20">
+                <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center mx-auto mb-3">
+                  <Cloud className="w-5 h-5 text-indigo-400" />
+                </div>
+                <h3 className="font-medium text-sm">Dropbox</h3>
+                <p className="text-xs text-muted-foreground mt-1">2 GB free storage</p>
+              </div>
+            </div>
+            <Button 
+              onClick={() => window.location.href = '/integrations'}
+              className="gap-2"
+              data-testid="button-go-integrations"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Go to Integrations to Connect
+            </Button>
           </div>
         ) : (
           <>
