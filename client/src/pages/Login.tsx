@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Cpu } from "lucide-react";
+import { Cpu, User } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Spinner } from "@/components/ui/spinner";
 import bgImage from "@assets/generated_images/secure_futuristic_authentication_portal_background.png";
@@ -12,7 +12,33 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleGuestLogin = async () => {
+    setIsGuestLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/auth/guest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Guest login failed");
+      }
+
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Guest login failed");
+    } finally {
+      setIsGuestLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,7 +174,29 @@ export default function Login() {
             Sign in with Google
           </Button>
 
-          <p className="text-center text-xs text-muted-foreground mt-6">
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full h-10 bg-white/5 border border-white/10 hover:bg-white/10 text-foreground"
+            onClick={handleGuestLogin}
+            disabled={isGuestLoading}
+            data-testid="button-guest-login"
+          >
+            {isGuestLoading ? (
+              <Spinner className="h-4 w-4" />
+            ) : (
+              <>
+                <User className="mr-2 h-4 w-4" />
+                Continue as Guest
+              </>
+            )}
+          </Button>
+
+          <p className="text-center text-xs text-muted-foreground mt-4">
+            <span className="text-yellow-500/80">⚡</span> Guest mode has limited features
+          </p>
+
+          <p className="text-center text-xs text-muted-foreground mt-2">
             Don't have an account?{" "}
             <Link href="/signup" className="text-primary hover:underline" data-testid="link-signup">
               Request Access

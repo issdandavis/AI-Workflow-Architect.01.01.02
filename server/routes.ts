@@ -192,6 +192,44 @@ export async function registerRoutes(
     }
   });
 
+  // Guest login - creates a temporary viewer session
+  app.post("/api/auth/guest", authLimiter, async (req: Request, res: Response) => {
+    try {
+      const guestId = `guest_${crypto.randomUUID()}`;
+      const guestEmail = `${guestId}@guest.aicore.local`;
+      
+      // Create a guest user with viewer role
+      const guestUser = await storage.createUser({
+        email: guestEmail,
+        passwordHash: "GUEST_NO_PASSWORD",
+        role: "viewer",
+        firstName: "Guest",
+        lastName: "User",
+      });
+
+      // Create a demo org for the guest
+      const org = await storage.createOrg({
+        name: "Guest Demo Organization",
+        ownerUserId: guestUser.id,
+      });
+
+      req.session.userId = guestUser.id;
+      req.session.orgId = org.id;
+      req.session.isGuest = true;
+
+      res.json({ 
+        id: guestUser.id, 
+        email: guestUser.email, 
+        role: guestUser.role,
+        orgId: org.id,
+        isGuest: true,
+      });
+    } catch (error) {
+      console.error("[Guest Login] Error:", error);
+      res.status(500).json({ error: "Failed to create guest session" });
+    }
+  });
+
   app.post("/api/auth/logout", requireAuth, (req: Request, res: Response) => {
     req.session.destroy((err) => {
       if (err) {
