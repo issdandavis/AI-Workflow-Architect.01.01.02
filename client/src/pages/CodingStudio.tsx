@@ -100,7 +100,7 @@ function extractYouTubeVideoId(url: string): string | null {
 export default function CodingStudio() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [provider, setProvider] = useState("openai");
+  const [provider, setProvider] = useState("google");
   const [editorContent, setEditorContent] = useState("// Generated code will appear here\n// Select a provider and enter a prompt to get started\n");
   const [copied, setCopied] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
