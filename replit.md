@@ -65,3 +65,17 @@ The platform follows a modern full-stack architecture.
 
 - **Database**:
   - PostgreSQL
+
+## Future Enhancements (Backlog)
+
+### Priority Tasks
+1. **Test All Features** - Run comprehensive e2e tests across all pages and API endpoints
+2. **AI Roundtable Self-Review** - Have the AI agents review and provide feedback on the platform
+3. **Button Audit** - Ensure all buttons across the app have proper functionality
+4. **Music Player** - Add a Pandora-style music player for background productivity music
+5. **Practice Codespace** - Create a dedicated code practice area with execution sandbox
+
+### Implementation Notes
+- Music player: Consider Spotify Web API, SoundCloud embed, or custom audio player
+- Codespace: Leverage existing Monaco editor (@monaco-editor/react) for code editing
+- Roundtable: Use the /roundtable page to initiate AI discussions about the platform
