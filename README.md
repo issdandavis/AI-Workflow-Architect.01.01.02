@@ -1,9 +1,23 @@
 # AI Orchestration Hub - Production Deployment Guide
 
-A full-stack AI multi-agent orchestration platform with cost controls, secure integrations, and centralized memory.
+A full-stack AI multi-agent orchestration platform with **free-first AI models**, cost controls, secure integrations, and centralized memory.
+
+## 💡 Key Highlights
+
+- 🎉 **Free-First AI Strategy**: Run on $0-5/month using Ollama and open-source models
+- 🤖 **Multi-Agent Orchestration**: Coordinate multiple AI models with intelligent selection
+- 🔐 **Integration Vault**: Connect GitHub, Google Drive, Dropbox, Notion, Zapier, and more
+- 💰 **Smart Cost Controls**: Automatic fallback from expensive to free models
+- 🧠 **Memory Layer**: Centralized and decentralized memory with keyword search
+- 📊 **Cost Dashboard**: Real-time tracking and budget alerts
+- 🔒 **Security**: RBAC, audit logging, rate limiting, and secure credential storage
+- 🌿 **Branch-First Git**: Safe repository operations (no direct main pushes)
+
+> **💸 Cost Optimization**: See [docs/COST_OPTIMIZATION_QUICK_REF.md](docs/COST_OPTIMIZATION_QUICK_REF.md) for how to minimize AI costs.
 
 ## Features
 
+- **Free-First AI Models**: Ollama (self-hosted), Groq, Together AI, Perplexity - avoid expensive APIs
 - **Multi-Agent Orchestration**: Coordinate OpenAI, Anthropic, xAI, and Perplexity models
 - **Integration Vault**: Connect GitHub, Google Drive, Dropbox, Notion, Zapier, and more
 - **Cost Governance**: Daily/monthly budgets with automatic enforcement
@@ -20,11 +34,17 @@ A full-stack AI multi-agent orchestration platform with cost controls, secure in
 - `SESSION_SECRET` - Secure random string for session encryption
 - `APP_ORIGIN` - Your app URL (e.g., https://your-app.replit.app)
 
-### AI Providers (Optional - add as needed)
-- `OPENAI_API_KEY` - OpenAI API key
-- `ANTHROPIC_API_KEY` - Anthropic (Claude) API key
-- `XAI_API_KEY` - xAI (Grok) API key
-- `PERPLEXITY_API_KEY` - Perplexity API key
+### AI Providers (Recommended for Free/Cheap Tier)
+- `OLLAMA_BASE_URL` - Ollama server URL (default: http://localhost:11434) - **FREE**
+- `GROQ_API_KEY` - Groq API key for cheap fallback ($0.59/1M tokens)
+- `TOGETHER_API_KEY` - Together AI key for cheap fallback ($0.90/1M tokens)
+- `HUGGINGFACE_TOKEN` - HuggingFace token for free inference
+
+### AI Providers (Expensive - User Keys Only)
+- `OPENAI_API_KEY` - OpenAI API key ($3/1M tokens) - Only use if user provides their own key
+- `ANTHROPIC_API_KEY` - Anthropic (Claude) API key ($3-15/1M tokens) - User key only
+- `XAI_API_KEY` - xAI (Grok) API key - User key only
+- `PERPLEXITY_API_KEY` - Perplexity API key ($0.05/1M tokens) - Cheap option for search
 
 ### Integrations (Optional - add as needed)
 - `GITHUB_TOKEN` - GitHub Personal Access Token for repo operations
@@ -147,12 +167,35 @@ The system includes safe stub adapters for all providers. When API keys are not 
 
 To enable real provider calls, add the appropriate API keys to Replit Secrets.
 
+## Cost Optimization Strategy 💰
+
+This platform uses a **free-first approach** to minimize AI costs:
+
+### Tier 1: Free (Primary) 🎉
+- **Ollama** (self-hosted): $0/month
+- Models: llama3.1:8b, codellama:13b, mistral:7b, phi-3
+- Setup: `curl https://ollama.ai/install.sh | sh && ollama pull llama3.1:8b`
+
+### Tier 2: Cheap Fallback 💚
+- **Groq**: $0.59/1M tokens (5x cheaper than OpenAI)
+- **Together AI**: $0.90/1M tokens (3x cheaper than OpenAI)
+- **Perplexity**: $0.05/1M tokens (60x cheaper than OpenAI)
+
+### Tier 3: Expensive (User Keys Only) 💸
+- **OpenAI**: $3-10/1M tokens - Only use with user's own API key
+- **Claude**: $3-15/1M tokens - Only use with user's own API key
+
+**Target**: <$5/month per user by using free models for 90%+ of requests.
+
+📖 **See**: [Cost Optimization Quick Reference](docs/COST_OPTIMIZATION_QUICK_REF.md) for details.
+
 ## Cost Controls
 
 1. **Set Budgets**: Create daily/monthly budgets via API
 2. **Automatic Enforcement**: Agent runs blocked when budget exceeded
-3. **Cost Tracking**: Each run estimates and tracks costs
-4. **Audit Trail**: All cost events logged
+3. **Smart Model Selection**: Automatically choose cheapest model for task
+4. **Cost Tracking**: Each run estimates and tracks costs
+5. **Audit Trail**: All cost events logged
 
 Example budget creation:
 ```bash
@@ -178,6 +221,14 @@ curl -X POST /api/budgets \
 - Check current budget: GET /api/budgets
 - Reset or increase budget limits
 
+## Documentation
+
+- 📘 [Cost Optimization Quick Reference](docs/COST_OPTIMIZATION_QUICK_REF.md) - Fast guide to minimizing AI costs
+- 📗 [Free-First AI Strategy Issue](docs/FREE_FIRST_AI_STRATEGY_ISSUE.md) - Complete implementation plan
+- 📙 [Free AI Implementation Guide](docs/FREE_AI_IMPLEMENTATION_GUIDE.md) - Developer guide with code templates
+- 📕 [Full Feature List](docs/FULL_FEATURE_LIST.md) - Complete feature documentation
+- 📔 [Project Documentation](docs/PROJECT_DOCUMENTATION.md) - Detailed project information
+
 ## Support
 
 For issues or questions, check:
@@ -185,6 +236,7 @@ For issues or questions, check:
 2. Database connection status
 3. Environment variables in Secrets
 4. Audit logs via API for operation history
+5. [Documentation](docs/) for implementation guides
 
 ## License
 
