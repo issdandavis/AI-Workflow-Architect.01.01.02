@@ -126,7 +126,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex-1 max-w-7xl mx-auto p-6 lg:p-10 space-y-8 pb-20 w-full">
           {children}
         </div>
-        <ShopifyBanner shopUrl="https://your-store.myshopify.com" />
+        <ShopifyBanner shopUrl="https://aethermore-works.myshopify.com" />
       </main>
     </div>
   );
