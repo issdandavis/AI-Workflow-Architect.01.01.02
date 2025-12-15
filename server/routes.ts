@@ -2634,5 +2634,101 @@ Format your response as JSON with the following structure:
     }
   });
 
+  // ===== UNIFIED STORAGE HUB ROUTES =====
+
+  app.get("/api/storage/providers", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { getProviderStatuses } = await import("./services/storageHub");
+      const providers = await getProviderStatuses();
+      res.json({ providers });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get providers" });
+    }
+  });
+
+  app.get("/api/storage/files/:provider", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { provider } = req.params;
+      const { folderId } = req.query;
+      
+      const validProviders = ['google-drive', 'onedrive', 'dropbox', 'github'];
+      if (!validProviders.includes(provider)) {
+        return res.status(400).json({ error: "Invalid provider" });
+      }
+      
+      const { listFilesFromProvider } = await import("./services/storageHub");
+      const files = await listFilesFromProvider(provider as any, folderId as string | undefined);
+      res.json({ files });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list files" });
+    }
+  });
+
+  app.get("/api/storage/download/:provider/:fileId", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { provider, fileId } = req.params;
+      
+      const { downloadFile } = await import("./services/storageHub");
+      const { data, name, mimeType } = await downloadFile(provider as any, decodeURIComponent(fileId));
+      
+      res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+      res.setHeader('Content-Type', mimeType);
+      res.send(data);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to download file" });
+    }
+  });
+
+  app.post("/api/storage/folder/:provider", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { provider } = req.params;
+      const { name, parentFolderId } = z.object({
+        name: z.string().min(1),
+        parentFolderId: z.string().optional(),
+      }).parse(req.body);
+      
+      const { createFolder } = await import("./services/storageHub");
+      const folder = await createFolder(provider as any, parentFolderId, name);
+      res.json({ folder });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to create folder" });
+    }
+  });
+
+  app.delete("/api/storage/:provider/:fileId", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { provider, fileId } = req.params;
+      
+      const { deleteItem } = await import("./services/storageHub");
+      await deleteItem(provider as any, decodeURIComponent(fileId));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to delete item" });
+    }
+  });
+
+  // ===== DROPBOX ROUTES =====
+
+  app.get("/api/dropbox/status", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { getDropboxAccountInfo } = await import("./services/dropboxClient");
+      const info = await getDropboxAccountInfo();
+      res.json({ connected: true, ...info });
+    } catch (error) {
+      res.json({ connected: false });
+    }
+  });
+
+  app.get("/api/dropbox/files", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const path = (req.query.path as string) || '';
+      const { listDropboxFiles } = await import("./services/dropboxClient");
+      const files = await listDropboxFiles(path);
+      res.json({ files });
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list files" });
+    }
+  });
+
   return httpServer;
 }

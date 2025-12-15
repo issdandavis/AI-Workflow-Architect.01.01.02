@@ -18,6 +18,7 @@ import {
   BarChart3
 } from "lucide-react";
 import bgImage from "@assets/generated_images/dark_abstract_neural_network_background_for_ai_dashboard.png";
+import { ShopifyBanner } from "@/components/ShopifyBanner";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -121,10 +122,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 z-10 overflow-y-auto h-screen relative">
-        <div className="max-w-7xl mx-auto p-6 lg:p-10 space-y-8 pb-20">
+      <main className="flex-1 z-10 overflow-y-auto h-screen relative flex flex-col">
+        <div className="flex-1 max-w-7xl mx-auto p-6 lg:p-10 space-y-8 pb-20 w-full">
           {children}
         </div>
+        <ShopifyBanner shopUrl="https://your-store.myshopify.com" />
       </main>
     </div>
   );
