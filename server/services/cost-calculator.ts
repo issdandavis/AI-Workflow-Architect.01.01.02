@@ -70,7 +70,11 @@ export function estimateCost(
     return ((inputTokens + outputTokens) / 1000) * freeModel.costPer1kTokens;
   }
 
-  const providerCosts = PROVIDER_COSTS[provider.toLowerCase()] || PROVIDER_COSTS.openai;
+  const providerCosts = PROVIDER_COSTS[provider.toLowerCase()];
+  if (!providerCosts) {
+    console.warn(`Unknown provider "${provider}" - defaulting to zero cost. Add it to PROVIDER_COSTS.`);
+    return 0;
+  }
   const modelCosts = providerCosts[model] || providerCosts.default;
 
   const inputCost = (inputTokens / 1000) * modelCosts.input;

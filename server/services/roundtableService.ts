@@ -3,7 +3,7 @@ import { roundtableSessions, roundtableMessages } from "@shared/schema";
 import type { RoundtableSession, RoundtableMessage, InsertRoundtableSession, InsertRoundtableMessage } from "@shared/schema";
 import { eq, asc, desc } from "drizzle-orm";
 import { getProviderAdapter } from "./providerAdapters";
-import { trackUsage, estimateCost, estimateTokens } from "./cost-calculator";
+import { trackUsage, estimateCost, estimateTokens, checkBudgetAllowance } from "./cost-calculator";
 
 export interface RoundtableConfig {
   title: string;
@@ -134,12 +134,28 @@ export async function executeNextTurn(
     return { provider: "", model: "", content: "", tokensUsed: 0, responseTimeMs: 0, success: false, error: "No providers configured" };
   }
 
-  const currentProviderIndex = session.currentTurn % providers.length;
-  const provider = providers[currentProviderIndex];
+  const provider = selectNextProvider(session, providers);
   const model = PROVIDER_MODELS[provider] || "default";
 
   const messages = await getSessionMessages(sessionId);
   const prompt = buildPrompt(session, messages, provider);
+
+  const estimatedInputTokens = estimateTokens(prompt);
+  const estimatedOutputTokens = 500;
+  const estimatedCost = estimateCost(provider, model, estimatedInputTokens, estimatedOutputTokens);
+  
+  const budgetCheck = await checkBudgetAllowance(orgId, estimatedCost);
+  if (!budgetCheck.allowed) {
+    return {
+      provider,
+      model,
+      content: "",
+      tokensUsed: 0,
+      responseTimeMs: 0,
+      success: false,
+      error: budgetCheck.reason || "Budget limit exceeded",
+    };
+  }
 
   const startTime = Date.now();
   const adapter = getProviderAdapter(provider);
@@ -198,6 +214,25 @@ export async function executeNextTurn(
     responseTimeMs,
     success: true,
   };
+}
+
+function selectNextProvider(session: RoundtableSession, providers: string[]): string {
+  const mode = session.orchestrationMode || "round_robin";
+  
+  switch (mode) {
+    case "round_robin":
+      return providers[session.currentTurn % providers.length];
+    
+    case "topic_based":
+      return providers[session.currentTurn % providers.length];
+    
+    case "free_form":
+      const randomIndex = Math.floor(Math.random() * providers.length);
+      return providers[randomIndex];
+    
+    default:
+      return providers[session.currentTurn % providers.length];
+  }
 }
 
 function buildPrompt(session: RoundtableSession, messages: RoundtableMessage[], currentProvider: string): string {
