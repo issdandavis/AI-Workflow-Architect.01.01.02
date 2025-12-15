@@ -1862,6 +1862,195 @@ export async function registerRoutes(
     }
   });
 
+  // ===== WORKFLOW ROUTES =====
+
+  app.get("/api/workflows", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      if (!orgId) {
+        return res.status(400).json({ error: "No organization set" });
+      }
+      const workflows = await storage.getWorkflows(orgId);
+      res.json(workflows);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch workflows" });
+    }
+  });
+
+  app.get("/api/workflows/:id", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const workflow = await storage.getWorkflow(id);
+      if (!workflow) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      if (workflow.orgId !== req.session.orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      res.json(workflow);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch workflow" });
+    }
+  });
+
+  app.post("/api/workflows", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+      if (!orgId || !userId) {
+        return res.status(400).json({ error: "No organization or user context" });
+      }
+
+      const { name, description, trigger, steps, status } = z.object({
+        name: z.string().min(1),
+        description: z.string().optional(),
+        trigger: z.enum(["manual", "schedule", "webhook"]).default("manual"),
+        steps: z.array(z.object({
+          id: z.string(),
+          provider: z.string(),
+          prompt: z.string(),
+        })),
+        status: z.enum(["active", "paused", "draft"]).default("draft"),
+      }).parse(req.body);
+
+      const workflow = await storage.createWorkflow({
+        orgId,
+        name,
+        description,
+        trigger,
+        steps,
+        status,
+        createdBy: userId,
+      });
+
+      await storage.createAuditLog({
+        orgId,
+        userId,
+        action: "workflow_created",
+        target: workflow.id,
+        detailJson: { name, trigger },
+      });
+
+      res.json(workflow);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.put("/api/workflows/:id", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+
+      const workflow = await storage.getWorkflow(id);
+      if (!workflow) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      if (workflow.orgId !== orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const updates = z.object({
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        trigger: z.enum(["manual", "schedule", "webhook"]).optional(),
+        steps: z.array(z.object({
+          id: z.string(),
+          provider: z.string(),
+          prompt: z.string(),
+        })).optional(),
+        status: z.enum(["active", "paused", "draft"]).optional(),
+      }).parse(req.body);
+
+      const updated = await storage.updateWorkflow(id, updates);
+
+      if (userId && orgId) {
+        await storage.createAuditLog({
+          orgId,
+          userId,
+          action: "workflow_updated",
+          target: id,
+          detailJson: updates,
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "Invalid request" });
+    }
+  });
+
+  app.delete("/api/workflows/:id", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+
+      const workflow = await storage.getWorkflow(id);
+      if (!workflow) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      if (workflow.orgId !== orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      await storage.deleteWorkflow(id);
+
+      if (userId && orgId) {
+        await storage.createAuditLog({
+          orgId,
+          userId,
+          action: "workflow_deleted",
+          target: id,
+          detailJson: { name: workflow.name },
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete workflow" });
+    }
+  });
+
+  app.post("/api/workflows/:id/run", requireAuth, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.session.orgId;
+      const userId = req.session.userId;
+
+      const workflow = await storage.getWorkflow(id);
+      if (!workflow) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      if (workflow.orgId !== orgId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const run = await storage.createWorkflowRun({
+        workflowId: id,
+        status: "running",
+        stepResults: null,
+        completedAt: null,
+        error: null,
+      });
+
+      if (userId && orgId) {
+        await storage.createAuditLog({
+          orgId,
+          userId,
+          action: "workflow_run_started",
+          target: id,
+          detailJson: { runId: run.id },
+        });
+      }
+
+      res.json(run);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to run workflow" });
+    }
+  });
+
   // ===== ROUNDTABLE ROUTES =====
 
   // Get available AI providers
@@ -2978,6 +3167,183 @@ Format your response as JSON with the following structure:
       res.json({ files });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "Failed to list files" });
+    }
+  });
+
+  // ===== ADMIN ROUTES =====
+
+  const requireAdmin = async (req: Request, res: Response, next: Function) => {
+    const userId = req.session.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const user = await storage.getUser(userId);
+    if (!user || (user.role !== "owner" && user.role !== "admin")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    next();
+  };
+
+  app.get("/api/admin/users", requireAuth, requireAdmin, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const users = await storage.listAllUsers();
+      const usersWithOrgs = await Promise.all(
+        users.map(async (user) => {
+          const orgs = await storage.getOrgsByUser(user.id);
+          return {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            createdAt: user.createdAt,
+            orgs: orgs.map(o => ({ id: o.id, name: o.name })),
+          };
+        })
+      );
+      res.json(usersWithOrgs);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to list users" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", requireAuth, requireAdmin, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session.userId;
+
+      if (id === userId) {
+        return res.status(400).json({ error: "Cannot delete yourself" });
+      }
+
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      await storage.deleteUser(id);
+
+      await storage.createAuditLog({
+        orgId: req.session.orgId!,
+        userId: userId!,
+        action: "admin_delete_user",
+        target: id,
+        detailJson: { deletedEmail: user.email },
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to delete user" });
+    }
+  });
+
+  app.get("/api/admin/stats", requireAuth, requireAdmin, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const [userCount, orgCount, usageSummary] = await Promise.all([
+        storage.getUserCount(),
+        storage.getOrgCount(),
+        storage.getGlobalUsageSummary(thirtyDaysAgo),
+      ]);
+
+      res.json({
+        totalUsers: userCount,
+        totalOrgs: orgCount,
+        totalTokens: usageSummary.totalTokens,
+        totalCostUsd: usageSummary.totalCostUsd,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to get admin stats" });
+    }
+  });
+
+  app.get("/api/admin/audit-logs", requireAuth, requireAdmin, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const search = req.query.search as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 100;
+
+      const logs = await storage.searchAuditLogs(search, Math.min(limit, 500));
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to search audit logs" });
+    }
+  });
+
+  app.get("/api/admin/export", requireAuth, requireAdmin, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      const orgId = req.session.orgId;
+
+      if (!userId || !orgId) {
+        return res.status(400).json({ error: "No user or organization context" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const isOwner = user.role === "owner";
+      const exportData = await storage.getExportData(orgId, isOwner);
+
+      await storage.createAuditLog({
+        orgId,
+        userId,
+        action: "data_export",
+        target: isOwner ? "all_data" : "org_data",
+        detailJson: { 
+          isOwner,
+          userCount: exportData.users.length,
+          orgCount: exportData.orgs.length,
+          projectCount: exportData.projects.length,
+        },
+      });
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename="orchestration-hub-export-${timestamp}.json"`);
+      res.json(exportData);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to export data" });
+    }
+  });
+
+  // ===== PUBLIC STATUS ENDPOINT =====
+
+  app.get("/api/status", (req: Request, res: Response) => {
+    const circuitStatus = retryService.getCircuitStatus();
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      circuits: circuitStatus,
+    });
+  });
+
+  // ===== CIRCUIT MANAGEMENT =====
+
+  app.post("/api/circuits/reset", requireAuth, requireAdmin, apiLimiter, async (req: Request, res: Response) => {
+    try {
+      const { provider } = z.object({
+        provider: z.string().optional(),
+      }).parse(req.body);
+
+      if (provider) {
+        retryService.resetCircuit(provider);
+      } else {
+        retryService.resetAllCircuits();
+      }
+
+      await storage.createAuditLog({
+        orgId: req.session.orgId!,
+        userId: req.session.userId!,
+        action: "circuit_reset",
+        target: provider || "all",
+        detailJson: null,
+      });
+
+      res.json({ success: true, circuits: retryService.getCircuitStatus() });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to reset circuit" });
     }
   });
 

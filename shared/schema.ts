@@ -533,3 +533,50 @@ export const insertUserProfileSchema = createInsertSchema(userProfiles).omit({
 
 export type InsertUserProfile = z.infer<typeof insertUserProfileSchema>;
 export type UserProfile = typeof userProfiles.$inferSelect;
+
+// ===== AUTOMATED WORKFLOWS =====
+// User-defined task sequences
+export const workflows = pgTable("workflows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => orgs.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  trigger: text("trigger", { enum: ["manual", "schedule", "webhook"] }).notNull().default("manual"),
+  steps: jsonb("steps").notNull(),
+  status: text("status", { enum: ["active", "paused", "draft"] }).notNull().default("draft"),
+  lastRunAt: timestamp("last_run_at"),
+  runCount: integer("run_count").notNull().default(0),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertWorkflowSchema = createInsertSchema(workflows).omit({
+  id: true,
+  lastRunAt: true,
+  runCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertWorkflow = z.infer<typeof insertWorkflowSchema>;
+export type Workflow = typeof workflows.$inferSelect;
+
+// Workflow Runs - execution history
+export const workflowRuns = pgTable("workflow_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workflowId: varchar("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["running", "completed", "failed", "cancelled"] }).notNull().default("running"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  stepResults: jsonb("step_results"),
+  error: text("error"),
+});
+
+export const insertWorkflowRunSchema = createInsertSchema(workflowRuns).omit({
+  id: true,
+  startedAt: true,
+});
+
+export type InsertWorkflowRun = z.infer<typeof insertWorkflowRunSchema>;
+export type WorkflowRun = typeof workflowRuns.$inferSelect;

@@ -19,6 +19,10 @@ import AgentDev from "@/pages/AgentDev";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import Profile from "@/pages/Profile";
+import Admin from "@/pages/Admin";
+import Status from "@/pages/Status";
+import Logs from "@/pages/Logs";
+import Workflows from "@/pages/Workflows";
 
 const PUBLIC_ROUTES = ["/", "/shop", "/login", "/signup"];
 
@@ -43,6 +47,10 @@ function Router() {
       <Route path="/roundtable" component={Roundtable} />
       <Route path="/agent-dev" component={AgentDev} />
       <Route path="/profile" component={Profile} />
+      <Route path="/admin" component={Admin} />
+      <Route path="/status" component={Status} />
+      <Route path="/logs" component={Logs} />
+      <Route path="/workflows" component={Workflows} />
       
       <Route component={NotFound} />
     </Switch>

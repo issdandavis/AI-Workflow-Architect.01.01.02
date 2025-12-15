@@ -20,6 +20,8 @@ import {
   agentSuggestions, type AgentSuggestion, type InsertAgentSuggestion,
   agentProposals, type AgentProposal, type InsertAgentProposal,
   userProfiles, type UserProfile, type InsertUserProfile,
+  workflows, type Workflow, type InsertWorkflow,
+  workflowRuns, type WorkflowRun, type InsertWorkflowRun,
 } from "@shared/schema";
 import { eq, and, desc, like, sql, gte, max } from "drizzle-orm";
 
@@ -136,6 +138,39 @@ export interface IStorage {
   getUserProfile(userId: string): Promise<UserProfile | undefined>;
   createUserProfile(data: InsertUserProfile): Promise<UserProfile>;
   updateUserProfile(userId: string, data: Partial<InsertUserProfile>): Promise<UserProfile | undefined>;
+
+  // Admin Methods
+  listAllUsers(): Promise<User[]>;
+  deleteUser(id: string): Promise<void>;
+  getGlobalUsageSummary(since: Date): Promise<{ totalTokens: number; totalCostUsd: number }>;
+  getUserCount(): Promise<number>;
+  getOrgCount(): Promise<number>;
+  searchAuditLogs(search?: string, limit?: number): Promise<AuditLog[]>;
+  getExportData(orgId: string, isOwner: boolean): Promise<ExportData>;
+
+  // Workflows
+  getWorkflows(orgId: string): Promise<Workflow[]>;
+  getWorkflow(id: string): Promise<Workflow | undefined>;
+  createWorkflow(data: InsertWorkflow): Promise<Workflow>;
+  updateWorkflow(id: string, updates: Partial<InsertWorkflow>): Promise<Workflow | undefined>;
+  deleteWorkflow(id: string): Promise<void>;
+  createWorkflowRun(data: InsertWorkflowRun): Promise<WorkflowRun>;
+  getWorkflowRuns(workflowId: string): Promise<WorkflowRun[]>;
+  updateWorkflowRun(id: string, updates: Partial<InsertWorkflowRun>): Promise<WorkflowRun | undefined>;
+}
+
+export interface ExportData {
+  exportTimestamp: string;
+  exportVersion: string;
+  users: Omit<User, 'passwordHash'>[];
+  orgs: Org[];
+  projects: Project[];
+  agentRuns: AgentRun[];
+  usageRecords: UsageRecord[];
+  auditLogs: AuditLog[];
+  roundtableSessions: RoundtableSession[];
+  roundtableMessages: RoundtableMessage[];
+  integrations: Omit<Integration, 'metadataJson'>[];
 }
 
 export class DbStorage implements IStorage {
@@ -685,6 +720,186 @@ export class DbStorage implements IStorage {
       .where(eq(userProfiles.userId, userId))
       .returning();
     return profile;
+  }
+
+  // Admin Methods
+  async listAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(orgs).where(eq(orgs.ownerUserId, id));
+    await db.delete(users).where(eq(users.id, id));
+  }
+
+  async getGlobalUsageSummary(since: Date): Promise<{ totalTokens: number; totalCostUsd: number }> {
+    const records = await db
+      .select()
+      .from(usageRecords)
+      .where(gte(usageRecords.createdAt, since));
+    
+    const totalTokens = records.reduce((sum, r) => sum + r.inputTokens + r.outputTokens, 0);
+    const totalCostUsd = records.reduce((sum, r) => sum + parseFloat(r.estimatedCostUsd || "0"), 0);
+    
+    return { totalTokens, totalCostUsd };
+  }
+
+  async getUserCount(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` }).from(users);
+    return Number(result[0]?.count || 0);
+  }
+
+  async getOrgCount(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` }).from(orgs);
+    return Number(result[0]?.count || 0);
+  }
+
+  async searchAuditLogs(search?: string, limit: number = 100): Promise<AuditLog[]> {
+    if (search) {
+      return db
+        .select()
+        .from(auditLog)
+        .where(like(auditLog.action, `%${search}%`))
+        .orderBy(desc(auditLog.createdAt))
+        .limit(limit);
+    }
+    return db
+      .select()
+      .from(auditLog)
+      .orderBy(desc(auditLog.createdAt))
+      .limit(limit);
+  }
+
+  async getExportData(orgId: string, isOwner: boolean): Promise<ExportData> {
+    const exportVersion = "1.0.0";
+    
+    if (isOwner) {
+      const [allUsers, allOrgs, allProjects, allAgentRuns, allUsageRecords, allAuditLogs, allRoundtableSessions, allIntegrations] = await Promise.all([
+        db.select().from(users).orderBy(desc(users.createdAt)),
+        db.select().from(orgs).orderBy(desc(orgs.createdAt)),
+        db.select().from(projects).orderBy(desc(projects.createdAt)),
+        db.select().from(agentRuns).orderBy(desc(agentRuns.createdAt)).limit(1000),
+        db.select().from(usageRecords).orderBy(desc(usageRecords.createdAt)).limit(1000),
+        db.select().from(auditLog).orderBy(desc(auditLog.createdAt)).limit(1000),
+        db.select().from(roundtableSessions).orderBy(desc(roundtableSessions.createdAt)),
+        db.select().from(integrations).orderBy(desc(integrations.createdAt)),
+      ]);
+
+      const sessionIds = allRoundtableSessions.map(s => s.id);
+      const allRoundtableMessages = sessionIds.length > 0 
+        ? await db.select().from(roundtableMessages).orderBy(roundtableMessages.sequenceNumber)
+        : [];
+
+      return {
+        exportTimestamp: new Date().toISOString(),
+        exportVersion,
+        users: allUsers.map(({ passwordHash, ...rest }) => rest),
+        orgs: allOrgs,
+        projects: allProjects,
+        agentRuns: allAgentRuns,
+        usageRecords: allUsageRecords,
+        auditLogs: allAuditLogs,
+        roundtableSessions: allRoundtableSessions,
+        roundtableMessages: allRoundtableMessages,
+        integrations: allIntegrations.map(({ metadataJson, ...rest }) => rest),
+      };
+    } else {
+      const [orgUsers, orgData, orgProjects, orgUsageRecords, orgAuditLogs, orgRoundtableSessions, orgIntegrations] = await Promise.all([
+        db.select().from(users).orderBy(desc(users.createdAt)),
+        db.select().from(orgs).where(eq(orgs.id, orgId)),
+        db.select().from(projects).where(eq(projects.orgId, orgId)).orderBy(desc(projects.createdAt)),
+        db.select().from(usageRecords).where(eq(usageRecords.orgId, orgId)).orderBy(desc(usageRecords.createdAt)).limit(1000),
+        db.select().from(auditLog).where(eq(auditLog.orgId, orgId)).orderBy(desc(auditLog.createdAt)).limit(1000),
+        db.select().from(roundtableSessions).where(eq(roundtableSessions.orgId, orgId)).orderBy(desc(roundtableSessions.createdAt)),
+        db.select().from(integrations).where(eq(integrations.orgId, orgId)).orderBy(desc(integrations.createdAt)),
+      ]);
+
+      const projectIds = orgProjects.map(p => p.id);
+      const orgAgentRuns = projectIds.length > 0
+        ? await db.select().from(agentRuns).orderBy(desc(agentRuns.createdAt)).limit(1000)
+        : [];
+
+      const sessionIds = orgRoundtableSessions.map(s => s.id);
+      const orgRoundtableMessages = sessionIds.length > 0
+        ? await db.select().from(roundtableMessages).orderBy(roundtableMessages.sequenceNumber)
+        : [];
+
+      return {
+        exportTimestamp: new Date().toISOString(),
+        exportVersion,
+        users: orgUsers.map(({ passwordHash, ...rest }) => rest),
+        orgs: orgData,
+        projects: orgProjects,
+        agentRuns: orgAgentRuns.filter(r => projectIds.includes(r.projectId)),
+        usageRecords: orgUsageRecords,
+        auditLogs: orgAuditLogs,
+        roundtableSessions: orgRoundtableSessions,
+        roundtableMessages: orgRoundtableMessages.filter(m => sessionIds.includes(m.sessionId)),
+        integrations: orgIntegrations.map(({ metadataJson, ...rest }) => rest),
+      };
+    }
+  }
+
+  // Workflows
+  async getWorkflows(orgId: string): Promise<Workflow[]> {
+    return db
+      .select()
+      .from(workflows)
+      .where(eq(workflows.orgId, orgId))
+      .orderBy(desc(workflows.createdAt));
+  }
+
+  async getWorkflow(id: string): Promise<Workflow | undefined> {
+    const [workflow] = await db.select().from(workflows).where(eq(workflows.id, id));
+    return workflow;
+  }
+
+  async createWorkflow(data: InsertWorkflow): Promise<Workflow> {
+    const [workflow] = await db.insert(workflows).values(data).returning();
+    return workflow;
+  }
+
+  async updateWorkflow(id: string, updates: Partial<InsertWorkflow>): Promise<Workflow | undefined> {
+    const [workflow] = await db
+      .update(workflows)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(workflows.id, id))
+      .returning();
+    return workflow;
+  }
+
+  async deleteWorkflow(id: string): Promise<void> {
+    await db.delete(workflows).where(eq(workflows.id, id));
+  }
+
+  async createWorkflowRun(data: InsertWorkflowRun): Promise<WorkflowRun> {
+    const [run] = await db.insert(workflowRuns).values(data).returning();
+    await db
+      .update(workflows)
+      .set({ 
+        lastRunAt: new Date(), 
+        runCount: sql`${workflows.runCount} + 1`,
+        updatedAt: new Date() 
+      })
+      .where(eq(workflows.id, data.workflowId));
+    return run;
+  }
+
+  async getWorkflowRuns(workflowId: string): Promise<WorkflowRun[]> {
+    return db
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.workflowId, workflowId))
+      .orderBy(desc(workflowRuns.startedAt));
+  }
+
+  async updateWorkflowRun(id: string, updates: Partial<InsertWorkflowRun>): Promise<WorkflowRun | undefined> {
+    const [run] = await db
+      .update(workflowRuns)
+      .set(updates)
+      .where(eq(workflowRuns.id, id))
+      .returning();
+    return run;
   }
 }
 

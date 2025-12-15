@@ -5,7 +5,8 @@ import CommandInput from "@/components/dashboard/CommandInput";
 import IntegrationStatus from "@/components/dashboard/IntegrationStatus";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { Zap, Users, DollarSign, MessageSquare } from "lucide-react";
+import { Zap, Users, DollarSign, MessageSquare, Plus, ArrowRight } from "lucide-react";
+import { Link } from "wouter";
 
 interface DashboardStats {
   usage: {
@@ -36,6 +37,17 @@ function formatCost(cost: number): string {
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
+  });
+
+  interface Workflow {
+    id: string;
+    name: string;
+    status: "active" | "paused" | "draft";
+    steps: { id: string; provider: string; prompt: string }[];
+  }
+
+  const { data: workflows = [] } = useQuery<Workflow[]>({
+    queryKey: ["/api/workflows"],
   });
 
   const agents = [
@@ -135,36 +147,51 @@ export default function Dashboard() {
               ))}
             </div>
 
-            <div className="glass-panel p-6 rounded-2xl min-h-[300px]">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <span className="w-1 h-6 bg-primary rounded-full" />
-                Active Workflows
-              </h2>
-              <div className="relative h-48 border border-white/10 rounded-xl bg-black/20 overflow-hidden flex items-center justify-center">
-                 <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px]" />
-                 
-                 <div className="flex items-center gap-8 relative z-10">
-                    <div className="p-4 rounded-xl bg-card border border-primary/50 shadow-[0_0_15px_rgba(0,255,255,0.2)] flex flex-col items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center font-bold">G</div>
-                      <span className="text-xs font-mono">GitHub</span>
-                    </div>
-                    <div className="h-[2px] w-16 bg-gradient-to-r from-primary/50 to-purple-500/50 animate-pulse relative">
-                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full shadow-[0_0_10px_white]" />
-                    </div>
-                    <div className="p-4 rounded-xl bg-card border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex flex-col items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center font-bold">Z</div>
-                      <span className="text-xs font-mono">Zapier</span>
-                    </div>
-                    <div className="h-[2px] w-16 bg-gradient-to-r from-purple-500/50 to-blue-500/50 animate-pulse relative">
-                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full shadow-[0_0_10px_white]" />
-                    </div>
-                    <div className="p-4 rounded-xl bg-card border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)] flex flex-col items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">N</div>
-                      <span className="text-xs font-mono">Notion</span>
-                    </div>
-                 </div>
+            <Link href="/workflows" className="block">
+              <div className="glass-panel p-6 rounded-2xl min-h-[300px] cursor-pointer hover:border-primary/50 transition-colors" data-testid="active-workflows-section">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <span className="w-1 h-6 bg-primary rounded-full" />
+                  Active Workflows
+                  <ArrowRight className="w-4 h-4 ml-auto text-muted-foreground" />
+                </h2>
+                <div className="relative h-48 border border-white/10 rounded-xl bg-black/20 overflow-hidden flex items-center justify-center">
+                   <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px]" />
+                   
+                   {workflows.length === 0 ? (
+                     <div className="flex flex-col items-center gap-4 relative z-10 text-center">
+                       <div className="rounded-full bg-primary/10 p-4">
+                         <Plus className="w-8 h-8 text-primary" />
+                       </div>
+                       <div>
+                         <p className="text-muted-foreground">No workflows yet.</p>
+                         <p className="text-primary text-sm">Create one!</p>
+                       </div>
+                     </div>
+                   ) : (
+                     <div className="flex items-center gap-4 relative z-10 px-4">
+                       {workflows.slice(0, 3).map((workflow, index) => (
+                         <div key={workflow.id} className="flex items-center gap-4">
+                           <div className={`p-4 rounded-xl bg-card border ${workflow.status === 'active' ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : workflow.status === 'paused' ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 'border-gray-500/50'} flex flex-col items-center gap-2 min-w-[80px]`}>
+                             <div className={`w-8 h-8 rounded-full ${workflow.status === 'active' ? 'bg-green-500' : workflow.status === 'paused' ? 'bg-yellow-500' : 'bg-gray-500'} text-white flex items-center justify-center font-bold text-sm`}>
+                               {workflow.name.charAt(0).toUpperCase()}
+                             </div>
+                             <span className="text-xs font-mono truncate max-w-[70px]">{workflow.name}</span>
+                           </div>
+                           {index < Math.min(workflows.length - 1, 2) && (
+                             <div className="h-[2px] w-8 bg-gradient-to-r from-primary/50 to-purple-500/50 animate-pulse relative">
+                               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full shadow-[0_0_10px_white]" />
+                             </div>
+                           )}
+                         </div>
+                       ))}
+                       {workflows.length > 3 && (
+                         <div className="text-xs text-muted-foreground">+{workflows.length - 3} more</div>
+                       )}
+                     </div>
+                   )}
+                </div>
               </div>
-            </div>
+            </Link>
           </div>
 
           {/* Right Column: Feed & Input */}

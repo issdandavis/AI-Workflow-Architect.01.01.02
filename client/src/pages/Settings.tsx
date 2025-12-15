@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { User, Key, Trash2, Plus, Loader2, CheckCircle, AlertCircle, BarChart3 } from "lucide-react";
+import { User, Key, Trash2, Plus, Loader2, CheckCircle, AlertCircle, BarChart3, Download, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +52,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     loadCredentials();
@@ -149,6 +150,40 @@ export default function Settings() {
   function getProviderLabel(name: string): string {
     const provider = providers.find((p) => p.name === name);
     return provider?.label || name;
+  }
+
+  async function handleExportData() {
+    setExporting(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/admin/export");
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to export data");
+      }
+
+      const blob = await res.blob();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `orchestration-hub-export-${timestamp}.json`;
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setSuccess("Data exported successfully");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to export data");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -332,6 +367,54 @@ export default function Settings() {
                   All API keys are encrypted with AES-256-GCM before storage. Keys are
                   decrypted only when needed for API calls and never logged.
                 </p>
+              </div>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl space-y-4" data-testid="card-data-export">
+              <div className="flex items-center gap-2">
+                <Download className="w-5 h-5 text-primary" />
+                <h2 className="text-xl font-bold">Data Export</h2>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                  <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-yellow-500 mb-1">Export Warning</p>
+                    <p className="text-muted-foreground">
+                      This will export all your organization data including users, projects, 
+                      agent runs, usage records, audit logs, roundtable sessions, and integrations. 
+                      Sensitive data like API keys and passwords are excluded from the export.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Download a complete JSON backup of your data.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleExportData}
+                    disabled={exporting}
+                    data-testid="button-export-data"
+                  >
+                    {exporting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4 mr-2" />
+                        Export All Data
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
