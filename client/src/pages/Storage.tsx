@@ -198,7 +198,7 @@ export default function Storage() {
     },
     onSuccess: () => {
       toast({ title: "Folder created successfully" });
-      queryClient.invalidateQueries({ queryKey: ["/api/storage/files", selectedProvider] });
+      queryClient.invalidateQueries({ queryKey: ["/api/storage/files", selectedProvider, currentFolderId] });
       setShowNewFolderDialog(false);
       setNewFolderName("");
     },
@@ -209,12 +209,14 @@ export default function Storage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (file: UnifiedFile) => {
-      const res = await apiRequest("DELETE", `/api/storage/${file.provider}/${encodeURIComponent(file.id)}`);
+      // For Dropbox, use path instead of id since Dropbox API uses paths
+      const identifier = file.provider === 'dropbox' && file.path ? file.path : file.id;
+      const res = await apiRequest("DELETE", `/api/storage/${file.provider}/${encodeURIComponent(identifier)}`);
       return res.json();
     },
     onSuccess: () => {
       toast({ title: "Item deleted successfully" });
-      queryClient.invalidateQueries({ queryKey: ["/api/storage/files", selectedProvider] });
+      queryClient.invalidateQueries({ queryKey: ["/api/storage/files", selectedProvider, currentFolderId] });
       setDeleteTarget(null);
     },
     onError: (error: Error) => {
@@ -223,8 +225,10 @@ export default function Storage() {
   });
 
   const handleFolderClick = (folder: UnifiedFile) => {
-    setCurrentFolderId(folder.id);
-    setBreadcrumbs((prev) => [...prev, { id: folder.id, name: folder.name }]);
+    // For Dropbox, use path as folder identifier since Dropbox API uses paths
+    const folderId = folder.provider === 'dropbox' && folder.path ? folder.path : folder.id;
+    setCurrentFolderId(folderId);
+    setBreadcrumbs((prev) => [...prev, { id: folderId, name: folder.name }]);
   };
 
   const handleBreadcrumbClick = (index: number) => {
@@ -242,7 +246,9 @@ export default function Storage() {
   };
 
   const handleDownload = (file: UnifiedFile) => {
-    const url = `/api/storage/download/${file.provider}/${encodeURIComponent(file.id)}`;
+    // For Dropbox, use path instead of id since Dropbox API uses paths
+    const identifier = file.provider === 'dropbox' && file.path ? file.path : file.id;
+    const url = `/api/storage/download/${file.provider}/${encodeURIComponent(identifier)}`;
     window.open(url, "_blank");
   };
 

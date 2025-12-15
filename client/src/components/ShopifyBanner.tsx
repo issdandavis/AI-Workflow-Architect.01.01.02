@@ -6,7 +6,7 @@ interface ShopifyBannerProps {
 }
 
 export function ShopifyBanner({ 
-  shopUrl = "https://your-store.myshopify.com", 
+  shopUrl = "https://aethermore-works.myshopify.com", 
   className = "" 
 }: ShopifyBannerProps) {
   return (
