@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles, Zap, Lock, Globe, Brain, Code2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { Link } from "wouter";
 import bgImage from "@assets/generated_images/clean_modern_ecommerce_storefront_background.png";
 
 export default function PublicHome() {
@@ -16,20 +15,18 @@ export default function PublicHome() {
           <span className="font-bold text-xl tracking-tight" data-testid="text-brand">AI Orchestration Hub</span>
         </div>
         <div className="flex items-center gap-6">
-          <Link href="/shop">
-            <span className="text-sm font-medium hover:text-purple-400 transition-colors cursor-pointer" data-testid="link-pricing">Pricing</span>
-          </Link>
-          <Link href="/login">
-            <span className="text-sm font-medium hover:text-purple-400 transition-colors flex items-center gap-2 cursor-pointer" data-testid="link-login">
-              <Lock className="w-3 h-3" />
-              Login
-            </span>
-          </Link>
-          <Link href="/shop">
+          <a href="/shop" className="text-sm font-medium hover:text-purple-400 transition-colors cursor-pointer" data-testid="link-pricing">
+            Pricing
+          </a>
+          <a href="/login" className="text-sm font-medium hover:text-purple-400 transition-colors flex items-center gap-2 cursor-pointer" data-testid="link-login">
+            <Lock className="w-3 h-3" />
+            Login
+          </a>
+          <a href="/shop">
             <Button className="bg-white text-black hover:bg-white/90 rounded-full px-6" data-testid="button-get-started">
               Get Started
             </Button>
-          </Link>
+          </a>
         </div>
       </nav>
 
@@ -65,16 +62,16 @@ export default function PublicHome() {
             transition={{ delay: 0.2, duration: 0.5 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
-            <Link href="/shop">
+            <a href="/shop">
               <Button size="lg" className="h-14 px-8 rounded-full bg-purple-600 hover:bg-purple-500 text-lg shadow-[0_0_20px_rgba(147,51,234,0.4)] transition-all hover:scale-105" data-testid="button-view-pricing">
                 View Pricing <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
-            </Link>
-            <Link href="/signup">
+            </a>
+            <a href="/signup">
               <Button size="lg" variant="outline" className="h-14 px-8 rounded-full border-white/20 hover:bg-white/10 text-lg backdrop-blur-sm" data-testid="button-try-free">
                 Try Free
               </Button>
-            </Link>
+            </a>
           </motion.div>
         </div>
       </section>
@@ -113,11 +110,11 @@ export default function PublicHome() {
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-4xl font-bold mb-6" data-testid="text-cta-title">Simple Pricing, No Surprises</h2>
           <p className="text-xl text-white/60 mb-8">$49 lifetime access or $9/month. Cancel anytime.</p>
-          <Link href="/shop">
+          <a href="/shop">
             <Button size="lg" className="h-14 px-10 rounded-full bg-purple-600 hover:bg-purple-500 text-lg" data-testid="button-cta-pricing">
               See Pricing Plans <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
-          </Link>
+          </a>
         </div>
       </section>
     </div>

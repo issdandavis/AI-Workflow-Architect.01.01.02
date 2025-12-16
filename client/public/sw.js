@@ -1,6 +1,6 @@
-const CACHE_NAME = 'ai-orchestration-hub-v2';
-const STATIC_CACHE = 'static-v2';
-const DYNAMIC_CACHE = 'dynamic-v2';
+const CACHE_NAME = 'ai-orchestration-hub-v5';
+const STATIC_CACHE = 'static-v5';
+const DYNAMIC_CACHE = 'dynamic-v5';
 
 const STATIC_ASSETS = [
   '/',

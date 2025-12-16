@@ -45,9 +45,10 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
             .then(function(registration) {
-              console.log('ServiceWorker registered with scope:', registration.scope);
+              console.log('ServiceWorker registered');
+              registration.update();
             })
             .catch(function(error) {
               console.log('ServiceWorker registration failed:', error);

@@ -4,7 +4,33 @@ import helmet from "helmet";
 import cors from "cors";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
-import { createServer } from "http";
+import { createServer, Server } from "http";
+
+// Create server early for shutdown handling
+const app = express();
+const httpServer: Server = createServer(app);
+
+// Graceful shutdown handling
+let isShuttingDown = false;
+const shutdown = (signal: string) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+  
+  httpServer.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+  
+  // Force exit after 5 seconds if graceful shutdown fails
+  setTimeout(() => {
+    console.log('Forcing shutdown...');
+    process.exit(1);
+  }, 5000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Startup logging
 console.log("Starting server initialization...");
@@ -44,9 +70,6 @@ if (missingVars.length > 0) {
     process.exit(1);
   }
 }
-
-const app = express();
-const httpServer = createServer(app);
 
 declare module "http" {
   interface IncomingMessage {
