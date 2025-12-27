@@ -1,11 +1,13 @@
 import { storage } from "../storage";
 import { GeminiAdapter } from "./providerAdapters";
+import { handleFailure, diagnoseFailure, attemptAutoFix, FailureContext } from "./failureHandler";
 
 export interface GuideAgentRequest {
   message: string;
   context: string;
   orgId: string;
   userId: string;
+  errorContext?: FailureContext; // Optional: if user is asking about a specific error
 }
 
 export interface GuideAgentAction {
@@ -37,6 +39,9 @@ const AVAILABLE_TOOLS = [
   { name: "agent.run", description: "Start an AI agent run for a goal", args: ["projectId", "goal", "provider?", "model?"] },
   { name: "agent.status", description: "Check status of an agent run", args: ["runId"] },
   { name: "audit.list", description: "Get recent audit logs", args: ["limit?"] },
+  { name: "error.diagnose", description: "Diagnose an error and explain root cause", args: ["errorMessage", "operation", "stackTrace?"] },
+  { name: "error.autofix", description: "Attempt to automatically fix an error in a safe branch", args: ["errorMessage", "operation"] },
+  { name: "docs.search", description: "Search documentation for help with a topic", args: ["topic"] },
 ];
 
 const PAGE_CONTEXT_HINTS: Record<string, string> = {
@@ -132,6 +137,59 @@ async function executeLocalTool(toolName: string, args: Record<string, unknown>,
         const logs = await storage.getAuditLogs(ctx.orgId, Math.min(20, Number(args.limit ?? 10)));
         return { result: { logs: logs.map(l => ({ id: l.id, action: l.action, target: l.target, createdAt: l.createdAt })) } };
       }
+      case "error.diagnose": {
+        const failureContext: FailureContext = {
+          errorMessage: String(args.errorMessage),
+          failedOperation: String(args.operation),
+          errorStack: args.stackTrace ? String(args.stackTrace) : undefined,
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+        };
+        const diagnosis = await diagnoseFailure(failureContext);
+        return { result: { 
+          rootCause: diagnosis.rootCause,
+          explanation: diagnosis.explanation,
+          suggestedFix: diagnosis.suggestedFix,
+          canAutoFix: diagnosis.canAutoFix,
+          difficulty: diagnosis.fixDifficulty
+        } };
+      }
+      case "error.autofix": {
+        const failureContext: FailureContext = {
+          errorMessage: String(args.errorMessage),
+          failedOperation: String(args.operation),
+          userId: ctx.userId,
+          orgId: ctx.orgId,
+        };
+        const result = await handleFailure(failureContext);
+        return { result: {
+          diagnosis: result.diagnosis,
+          autoFixApplied: result.autoFixResult?.success || false,
+          branchName: result.autoFixResult?.branchName,
+          message: result.userMessage
+        } };
+      }
+      case "docs.search": {
+        // Simple documentation search - in production would search actual docs
+        const topic = String(args.topic).toLowerCase();
+        const docMap: Record<string, string> = {
+          "setup": "See docs/ONBOARDING_GUIDE.md for step-by-step setup",
+          "onboarding": "See docs/ONBOARDING_GUIDE.md for quick start",
+          "troubleshooting": "See docs/TROUBLESHOOTING_GUIDE.md for common issues",
+          "cost": "See docs/COST_OPTIMIZATION_QUICK_REF.md for cost management",
+          "api": "See docs/PROJECT_DOCUMENTATION.md for API reference",
+          "budget": "Set budgets in Settings → Budgets to control spending",
+          "provider": "Connect providers in Settings → Integrations",
+          "error": "See docs/TROUBLESHOOTING_GUIDE.md for error diagnosis",
+        };
+        
+        const result = Object.entries(docMap)
+          .filter(([key]) => topic.includes(key) || key.includes(topic))
+          .map(([_, value]) => value)
+          .join("\n") || "Check docs/ folder for comprehensive guides";
+        
+        return { result: { documentation: result } };
+      }
       default:
         return { error: `Unknown tool: ${toolName}` };
     }
@@ -149,6 +207,13 @@ function buildPlannerPrompt(request: GuideAgentRequest): string {
 
   return `You are a helpful AI assistant for the AI Orchestration Hub platform. You help users manage their AI projects, integrations, and agent runs.
 
+You also serve as a DEBUGGER and FIXER - when users encounter errors, you:
+1. Diagnose the root cause in plain language
+2. Explain what went wrong and why
+3. Offer to automatically fix it in a safe branch (never touches main)
+4. Escalate to smarter AI if your fix doesn't work
+5. Create a structured GitHub issue if all automated attempts fail
+
 Current context: ${contextHint}
 
 Available tools you can use:
@@ -165,6 +230,9 @@ Examples:
 - If user asks "list my projects", respond with toolCalls for project.list
 - If user asks "what can I do here", respond with directResponse explaining the current page features
 - If user asks "search for X in project Y", respond with toolCalls for memory.search
+- If user says "I got error: Provider not configured", use error.diagnose tool to explain it
+- If user asks "can you fix this error", use error.autofix tool to attempt a safe fix
+- If user asks "how do I set up GitHub", use docs.search with topic "setup"
 
 Respond ONLY with valid JSON, no markdown or explanations.`;
 }
